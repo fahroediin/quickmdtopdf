@@ -5,14 +5,26 @@
   import jsPDF from 'jspdf';
   import { supabase } from '$lib/supabaseClient';
   import { user } from '$lib/stores.js';
-  import { robotoNormalBase64, robotoBoldBase64 } from '$lib/fonts.js';
+  import sampleMarkdown from '$lib/sample.md?raw';
 
-  // 1. Mengimpor konten dari file .md sebagai teks mentah
- import sampleMarkdown from '$lib/sample.md?raw';
+  // --- LOGIKA BARU UNTUK MEMUAT FONT LOKAL ---
+  // Impor file font sebagai URL
+  import robotoNormalURL from '$lib/fonts/Roboto-Regular.ttf';
+  import robotoBoldURL from '$lib/fonts/Roboto-Bold.ttf';
 
-  // 2. Menggunakan konten yang diimpor sebagai nilai awal
+  // Fungsi untuk mengubah file menjadi Base64
+  async function fileToBase64(url) {
+    const response = await fetch(url);
+    const blob = await response.blob();
+    return new Promise((resolve, reject) => {
+      const reader = new FileReader();
+      reader.onloadend = () => resolve(reader.result.split(',')[1]); // Ambil hanya data Base64
+      reader.onerror = reject;
+      reader.readAsDataURL(blob);
+    });
+  }
+
   let markdownContent = sampleMarkdown;
-
   let renderedHtml = '';
   let documentName = 'Untitled Document';
   let isProcessing = false;
@@ -31,84 +43,75 @@
 
 async function handleDownloadAndSave() {
   isProcessing = true;
-  const previewElement = document.getElementById('pdf-preview');
   
-  previewElement.classList.add('pdf-render-mode');
-
   try {
-    const pdf = new jsPDF({
-      orientation: 'p',
-      unit: 'pt',
-      format: 'a4'
-    });
-
-    // Menambahkan font dari data Base64 ke file virtual jsPDF
-    pdf.addFileToVFS('Roboto-Regular.ttf', robotoNormalBase64);
-    pdf.addFont('Roboto-Regular.ttf', 'Roboto', 'normal');
-
-    pdf.addFileToVFS('Roboto-Bold.ttf', robotoBoldBase64);
-    pdf.addFont('Roboto-Bold.ttf', 'Roboto', 'bold');
-
-    // Mengatur font default untuk dokumen
-    pdf.setFont('Roboto', 'normal');
-
-    const contentWidth = previewElement.offsetWidth;
-
-    // Opsi 'fontFaces' dihapus karena font sudah dimuat secara manual
-    await pdf.html(previewElement, {
-      callback: function(pdf) {
-        pdf.save(`${documentName}.pdf`);
+    // Kirim Markdown ke backend API kita
+    const response = await fetch('/api/generate-pdf', {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
       },
-      x: 40,
-      y: 40,
-      width: 515,
-      windowWidth: contentWidth,
-      autoPaging: 'text',
-      margin: [40, 40, 40, 40]
+      body: JSON.stringify({ markdown: markdownContent }),
     });
-      // Logika penyimpanan ke Supabase
-      if ($user) {
-        const { error } = await supabase
-          .from('documents')
-          .insert({
-            user_id: $user.id,
-            document_name: documentName,
-            markdown_content: markdownContent
-          });
-        if (error) throw error;
-        alert('PDF downloaded and document saved to your account!');
-      } else {
-        alert('PDF downloaded! Login to save your documents.');
-      }
+
+    if (!response.ok) {
+      throw new Error('Network response was not ok');
+    }
+
+    // Ambil PDF yang dikembalikan sebagai blob
+    const pdfBlob = await response.blob();
+
+    // Buat URL sementara untuk blob tersebut
+    const url = window.URL.createObjectURL(pdfBlob);
+    
+    // Buat link sementara untuk memicu unduhan
+    const a = document.createElement('a');
+    a.style.display = 'none';
+    a.href = url;
+    a.download = `${documentName}.pdf`; // Gunakan nama dokumen dari input
+    document.body.appendChild(a);
+    a.click();
+    
+    // Bersihkan URL sementara
+    window.URL.revokeObjectURL(url);
+    a.remove();
+
+    // Logika penyimpanan ke Supabase (tetap sama)
+    if ($user) {
+      const { error } = await supabase
+        .from('documents')
+        .insert({
+          user_id: $user.id,
+          document_name: documentName,
+          markdown_content: markdownContent
+        });
+      if (error) throw error;
+      alert('PDF downloaded and document saved to your account!');
+    } else {
+      alert('PDF downloaded! Login to save your documents.');
+    }
+
   } catch (error) {
     console.error('Error generating PDF:', error);
-    alert('Failed to generate PDF.');
+    alert('Failed to generate PDF. Check the server console for details.');
   } finally {
-    previewElement.classList.remove('pdf-render-mode');
     isProcessing = false;
   }
 }
 </script>
 
-<!-- 3. Memuat font Roboto di browser agar cocok dengan PDF -->
+<!-- Sisa file (svelte:head, style, HTML) tidak berubah -->
 <svelte:head>
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
   <link href="https://fonts.googleapis.com/css2?family=Roboto:wght@400;700&display=swap" rel="stylesheet">
 </svelte:head>
 
-<!-- 4. CSS khusus yang hanya aktif saat merender PDF -->
 <style>
   :global(.pdf-render-mode) {
     font-family: 'Roboto', sans-serif !important;
   }
-  :global(.pdf-render-mode p, 
-          .pdf-render-mode h1, 
-          .pdf-render-mode h2, 
-          .pdf-render-mode h3, 
-          .pdf-render-mode h4, 
-          .pdf-render-mode ul, 
-          .pdf-render-mode ol) {
+  :global(.pdf-render-mode p, .pdf-render-mode h1, .pdf-render-mode h2, .pdf-render-mode h3, .pdf-render-mode h4, .pdf-render-mode ul, .pdf-render-mode ol) {
     margin-top: 0 !important;
     margin-bottom: 12px !important;
     line-height: 1.5 !important;
@@ -128,30 +131,15 @@ async function handleDownloadAndSave() {
   }
 </style>
 
-<!-- Bagian HTML/Markup tidak berubah -->
 <div class="container mx-auto">
   <div class="flex justify-between items-center mb-4">
-    <input
-      type="text"
-      bind:value={documentName}
-      class="text-2xl font-bold p-2 border-b-2 focus:outline-none focus:border-green-500"
-    />
-    <button
-      on:click={handleDownloadAndSave}
-      disabled={isProcessing}
-      class="bg-blue-600 text-white px-6 py-2 rounded-md hover:bg-blue-700 disabled:bg-gray-400"
-    >
+    <input type="text" bind:value={documentName} class="text-2xl font-bold p-2 border-b-2 focus:outline-none focus:border-green-500" />
+    <button on:click={handleDownloadAndSave} disabled={isProcessing} class="bg-blue-600 text-white px-6 py-2 rounded-md hover:bg-blue-700 disabled:bg-gray-400">
       {isProcessing ? 'Processing...' : 'Download PDF'}
     </button>
   </div>
-
   <div class="grid grid-cols-1 md:grid-cols-2 gap-4" style="height: 75vh;">
-    <textarea
-      bind:value={markdownContent}
-      class="w-full h-full p-4 border rounded-md shadow-sm resize-none font-mono text-sm"
-      placeholder="Type your Markdown here..."
-    ></textarea>
-
+    <textarea bind:value={markdownContent} class="w-full h-full p-4 border rounded-md shadow-sm resize-none font-mono text-sm" placeholder="Type your Markdown here..."></textarea>
     <div class="w-full h-full p-4 border rounded-md shadow-sm bg-white overflow-y-auto">
       <div id="pdf-preview" class="prose max-w-none">
         {@html renderedHtml}
