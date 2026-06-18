@@ -8,16 +8,20 @@
   let loading = true;
 
   onMount(async () => {
-    // Redirect if not logged in
-    if (!$user) {
+    // Check session first to avoid race conditions with $user store initialization
+    const { data: { session } } = await supabase.auth.getSession();
+    if (!session) {
       window.location.href = '/login';
       return;
     }
 
+    // Set user store reactively
+    user.set(session.user);
+
     const { data, error } = await supabase
       .from('documents')
       .select('id, document_name, created_at')
-      .eq('user_id', $user.id)
+      .eq('user_id', session.user.id)
       .order('created_at', { ascending: false });
 
     if (data) {
