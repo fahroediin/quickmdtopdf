@@ -1,16 +1,82 @@
-### **Dokumentasi Integrasi OCR KTP via REST API di Loan Origination System (LOS) OutSystems**
+# QuickMDtoPDF — Sample Document
 
-Dokumen ini menjelaskan proses teknis untuk mengimplementasikan fungsionalitas Optical Character Recognition (OCR) untuk Kartu Tanda Penduduk (KTP) di dalam aplikasi Loan Origination System (LOS) yang dibangun di platform OutSystems. Integrasi ini dilakukan dengan cara *consume* REST API yang sudah ada.
+Ini adalah contoh dokumen Markdown yang mendemonstrasikan berbagai elemen formatting. Preview di sebelah kanan akan **match** dengan output PDF.
 
-#### **1. Deskripsi Umum**
+---
 
-Tujuan dari integrasi ini adalah untuk mengirimkan gambar KTP dari aplikasi LOS ke sebuah *endpoint* API eksternal. API tersebut akan memproses gambar menggunakan teknologi OCR untuk mengekstrak data teks dari KTP dan mengembalikan hasilnya sebagai respons. Proses ini mengotomatiskan penginputan data nasabah, mengurangi kesalahan manual, dan mempercepat proses originasi kredit.
+## 1. Text Formatting
 
-#### **2. Konfigurasi REST API di OutSystems**
+Ini adalah teks **bold**, *italic*, dan ***bold italic***. Anda juga bisa menggunakan ~~strikethrough~~ untuk mencoret teks.
 
-Untuk melakukan *consume* API, sebuah metode POST telah dikonfigurasi pada Service Module `LOSOCRServices`.
+Ini adalah [link ke Google](https://google.com) dan ini URL otomatis: https://github.com
 
-*   **Method URL:** `https://oksara-ara.my.id/api/v1/ktp?pic=true`
-*   **HTTP Method:** `POST`
+## 2. Lists
 
-... (dan seterusnya, seluruh konten markdown Anda) ...
+### Unordered List
+- Item pertama
+- Item kedua
+  - Sub-item A
+  - Sub-item B
+- Item ketiga
+
+### Ordered List
+1. Langkah pertama
+2. Langkah kedua
+   1. Sub-langkah 2.1
+   2. Sub-langkah 2.2
+3. Langkah ketiga
+
+## 3. Code
+
+Gunakan `inline code` untuk referensi singkat.
+
+```javascript
+// Code block dengan syntax
+function greet(name) {
+  console.log(`Hello, ${name}!`);
+  return { status: "success", message: `Greeted ${name}` };
+}
+
+greet("World");
+```
+
+## 4. Table
+
+| Fitur | Status | Keterangan |
+|-------|--------|------------|
+| Heading | ✅ | H1 sampai H6 |
+| Bold/Italic | ✅ | Inline formatting |
+| Table | ✅ | Dengan border dan zebra stripe |
+| Code Block | ✅ | Syntax highlighting |
+| Blockquote | ✅ | Dengan border kiri |
+
+## 5. Blockquote
+
+> Ini adalah blockquote. Digunakan untuk kutipan atau catatan penting.
+>
+> Bisa memiliki **multiple paragraphs** dan *formatting* di dalamnya.
+
+> Nested quote:
+>> Ini adalah nested blockquote di dalam blockquote.
+
+## 6. Horizontal Rule
+
+Konten di atas garis.
+
+---
+
+Konten di bawah garis.
+
+## 7. Mixed Content
+
+Berikut adalah contoh penggunaan **berbagai elemen** secara bersamaan:
+
+1. Buat file baru dengan perintah `touch index.js`
+2. Tambahkan kode berikut:
+   ```python
+   def calculate(x, y):
+       return x + y
+   ```
+3. Jalankan dengan `python index.py`
+
+> **Catatan:** Pastikan Python sudah terinstall di sistem Anda.
