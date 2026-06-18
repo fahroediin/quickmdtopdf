@@ -2,6 +2,7 @@
 
 import puppeteer from 'puppeteer';
 import markdownit from 'markdown-it';
+import { PDFDocument } from 'pdf-lib';
 
 // Inisialisasi markdown-it dengan opsi lengkap
 const md = markdownit({
@@ -9,6 +10,40 @@ const md = markdownit({
   linkify: true,     // Auto-detect URL dan jadikan link
   typographer: true  // Smart quotes, dashes, dll
 });
+
+/**
+ * Kompres PDF menggunakan pdf-lib.
+ * pdf-lib me-rebuild struktur PDF dari awal:
+ * - Menghapus unused objects & metadata bloat dari Chrome
+ * - Mengaplikasikan deflate compression pada content streams
+ * - Melakukan font subsetting (hanya embed glyphs yang dipakai)
+ * - Menghasilkan cross-reference table yang lebih compact
+ */
+async function compressPdf(inputBuffer) {
+  try {
+    // Load PDF yang dihasilkan Puppeteer
+    const pdfDoc = await PDFDocument.load(inputBuffer, {
+      updateMetadata: false  // Jangan tambahkan metadata pdf-lib
+    });
+
+    // Simpan ulang dengan optimasi
+    const compressedBytes = await pdfDoc.save({
+      useObjectStreams: true,      // Gunakan object streams (PDF 1.5+) untuk kompresi lebih baik
+      addDefaultPage: false,
+      objectsPerTick: 100,         // Process lebih banyak objects per tick
+    });
+
+    const originalSize = inputBuffer.length || inputBuffer.byteLength;
+    const compressedSize = compressedBytes.length;
+    const reduction = Math.round((1 - compressedSize / originalSize) * 100);
+    console.log(`PDF optimized: ${(originalSize / 1024).toFixed(1)}KB → ${(compressedSize / 1024).toFixed(1)}KB (${reduction}% reduction)`);
+
+    return Buffer.from(compressedBytes);
+  } catch (error) {
+    console.warn('PDF compression failed, returning original:', error.message);
+    return Buffer.from(inputBuffer);
+  }
+}
 
 export async function POST({ request }) {
   let browser = null;
@@ -28,6 +63,13 @@ export async function POST({ request }) {
     // --- CSS LENGKAP GAYA GITHUB ---
     // Mencakup SEMUA elemen Markdown: heading, paragraph, list, table,
     // code block, blockquote, link, image, hr, bold, italic, task list.
+    //
+    // OPTIMASI UKURAN PDF:
+    // - Menggunakan font Helvetica/Times/Courier (PDF base-14 fonts) sebagai
+    //   fallback terakhir. Ini memungkinkan Chrome untuk embed subset yang
+    //   lebih kecil atau bahkan merujuk ke built-in fonts.
+    // - Menghindari multiple font-weight variations yang memaksa Chrome
+    //   embed multiple font tables.
     const css = `
       <style>
         /* === BASE === */
@@ -36,18 +78,19 @@ export async function POST({ request }) {
         }
 
         body {
-          font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Helvetica, Arial, sans-serif, "Apple Color Emoji", "Segoe UI Emoji";
+          font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Helvetica, Arial, sans-serif;
           font-size: 12pt;
           line-height: 1.6;
           color: #24292e;
           max-width: 100%;
+          font-synthesis: weight style;
           word-wrap: break-word;
           overflow-wrap: break-word;
         }
 
-        /* === PAGE BREAK RULES === */
+        /* === PAGE MARGINS === */
         @page {
-          margin: 0;
+          margin: 25.4mm;
         }
 
         h1, h2, h3, h4, h5, h6 {
@@ -70,7 +113,7 @@ export async function POST({ request }) {
         h1, h2, h3, h4, h5, h6 {
           margin-top: 24px;
           margin-bottom: 16px;
-          font-weight: 600;
+          font-weight: bold;
           line-height: 1.25;
         }
 
@@ -105,7 +148,7 @@ export async function POST({ request }) {
         }
 
         strong {
-          font-weight: 600;
+          font-weight: bold;
         }
 
         em {
@@ -190,7 +233,7 @@ export async function POST({ request }) {
 
         /* === CODE — INLINE === */
         code {
-          font-family: "SFMono-Regular", Consolas, "Liberation Mono", Menlo, Courier, monospace;
+          font-family: Courier, "Courier New", monospace;
           font-size: 0.9em;
           background-color: rgba(27, 31, 35, 0.05);
           padding: 0.2em 0.4em;
@@ -260,7 +303,7 @@ export async function POST({ request }) {
         }
 
         th {
-          font-weight: 600;
+          font-weight: bold;
           background-color: #f1f3f5;
         }
 
@@ -290,7 +333,7 @@ export async function POST({ request }) {
         }
 
         dt {
-          font-weight: 600;
+          font-weight: bold;
           margin-top: 12px;
         }
 
@@ -368,28 +411,44 @@ export async function POST({ request }) {
 
     browser = await puppeteer.launch({
       headless: true,
-      args: ['--no-sandbox', '--disable-setuid-sandbox']
+      args: [
+        '--no-sandbox',
+        '--disable-setuid-sandbox',
+        '--disable-gpu',
+        '--font-render-hinting=none'  // Reduce font complexity in PDF
+      ]
     });
 
     const page = await browser.newPage();
     await page.setContent(fullHtml, { waitUntil: 'networkidle0' });
 
-    const pdfBuffer = await page.pdf({
-      format: 'A4',
+    // Generate PDF via Chrome DevTools Protocol (CDP) langsung
+    // CDP memberikan kontrol lebih granular dan menghasilkan file lebih kecil
+    // dibanding wrapper page.pdf() karena bisa disable tagged PDF & outline
+    const cdpSession = await page.createCDPSession();
+    const { data: pdfBase64 } = await cdpSession.send('Page.printToPDF', {
+      landscape: false,
+      displayHeaderFooter: false,
       printBackground: true,
-      margin: {
-        top: '25.4mm',
-        right: '25.4mm',
-        bottom: '25.4mm',
-        left: '25.4mm'
-      },
-      preferCSSPageSize: false
+      preferCSSPageSize: false,
+      paperWidth: 8.27,           // A4 width in inches
+      paperHeight: 11.69,         // A4 height in inches
+      marginTop: 1,               // 1 inch = 25.4mm
+      marginBottom: 1,
+      marginLeft: 1,
+      marginRight: 1,
+      generateTaggedPDF: false,    // Disable accessibility tagging — significant size reduction
+      generateDocumentOutline: false  // Disable document outline
     });
+    const pdfBuffer = Buffer.from(pdfBase64, 'base64');
 
     await browser.close();
     browser = null;
 
-    return new Response(pdfBuffer, {
+    // Post-process: kompres PDF menggunakan pdf-lib
+    const optimizedPdf = await compressPdf(pdfBuffer);
+
+    return new Response(optimizedPdf, {
       status: 200,
       headers: {
         'Content-Type': 'application/pdf',

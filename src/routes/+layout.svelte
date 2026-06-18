@@ -28,32 +28,32 @@
   }
 </script>
 
-<!-- Bagian HTML di bawah ini sudah benar, tidak perlu diubah -->
-<header class="bg-white shadow-md p-4 flex justify-between items-center">
-  <a href="/" class="flex items-center space-x-2">
-    <div class="bg-green-500 text-white font-bold text-xl w-10 h-10 flex items-center justify-center rounded-md">
+<!-- Bagian HTML di bawah ini menggunakan gaya desain Airtable (DESIGN.md) -->
+<header class="bg-white border-b border-[#dddddd] px-6 h-16 flex justify-between items-center select-none">
+  <a href="/" class="flex items-center space-x-3">
+    <div class="bg-[#181d26] text-white font-bold text-lg w-9 h-9 flex items-center justify-center rounded-lg transition-transform hover:scale-105">
       Q
     </div>
-    <span class="text-2xl font-semibold text-gray-700">QuickMDtoPDF</span>
+    <span class="text-xl font-bold text-[#181d26] tracking-tight">QuickMDtoPDF</span>
   </a>
-  <nav>
+  <nav class="font-sans text-sm">
     {#if $user}
-      <!-- Tampilan jika pengguna sudah login -->
-      <div class="flex items-center space-x-4">
-        <a href="/dashboard" class="text-gray-600 hover:text-green-600">My Documents</a>
-        <button on:click={handleLogout} class="bg-red-500 text-white px-4 py-2 rounded-md hover:bg-red-600">
+      <div class="flex items-center space-x-6">
+        <a href="/dashboard" class="text-[#333840] hover:text-[#181d26] font-medium transition-colors">My Documents</a>
+        <button on:click={handleLogout} class="bg-white border border-[#dddddd] text-[#333840] hover:bg-[#f8fafc] px-4 py-2 rounded-lg font-medium transition-colors duration-150 text-xs">
           Logout
         </button>
       </div>
     {:else}
-      <!-- Tampilan jika pengguna belum login -->
-      <a href="/login" class="bg-green-500 text-white px-4 py-2 rounded-md hover:bg-green-600">
-        Login
-      </a>
+      <div class="flex items-center space-x-4">
+        <a href="/login" class="bg-[#181d26] hover:bg-[#0d1218] text-white px-5 py-2 rounded-lg font-medium transition-colors duration-150 text-xs shadow-sm">
+          Login
+        </a>
+      </div>
     {/if}
   </nav>
 </header>
 
-<main class="p-4 bg-gray-50 min-h-screen">
+<main class="bg-white min-h-screen text-[#333840] font-sans antialiased">
   <slot />
-</main>
+</main>

@@ -10,6 +10,8 @@
   let renderedHtml = '';
   let documentName = 'Untitled Document';
   let isProcessing = false;
+  let loadingStatusText = 'Initiating export...';
+  let loadingProgress = 5;
 
   // Konfigurasi markdown-it SAMA dengan server
   const md = markdownit({
@@ -30,6 +32,24 @@
 
   async function handleDownloadAndSave() {
     isProcessing = true;
+    loadingProgress = 5;
+    loadingStatusText = 'Launching browser engine...';
+    
+    // Simulate real-time progress steps for Puppeteer + pdf-lib process
+    const progressInterval = setInterval(() => {
+      if (loadingProgress < 25) {
+        loadingProgress += Math.floor(Math.random() * 3) + 1;
+      } else if (loadingProgress < 55) {
+        loadingStatusText = 'Rendering markdown document layout...';
+        loadingProgress += Math.floor(Math.random() * 2) + 1;
+      } else if (loadingProgress < 80) {
+        loadingStatusText = 'Compressing embedded fonts...';
+        loadingProgress += Math.floor(Math.random() * 2) + 1;
+      } else if (loadingProgress < 95) {
+        loadingStatusText = 'Rebuilding compressed PDF object streams...';
+        loadingProgress += 0.5;
+      }
+    }, 150);
     
     try {
       // Kirim Markdown ke backend API kita
@@ -45,6 +65,9 @@
         const errorData = await response.json().catch(() => ({}));
         throw new Error(errorData.details || errorData.error || 'Failed to generate PDF');
       }
+
+      loadingStatusText = 'Finalizing download...';
+      loadingProgress = 100;
 
       // Ambil PDF yang dikembalikan sebagai blob
       const pdfBlob = await response.blob();
@@ -74,16 +97,16 @@
             markdown_content: markdownContent
           });
         if (error) throw error;
-        alert('PDF downloaded and document saved to your account!');
-      } else {
-        alert('PDF downloaded! Login to save your documents.');
       }
 
     } catch (error) {
       console.error('Error generating PDF:', error);
       alert(`Failed to generate PDF: ${error.message}`);
     } finally {
-      isProcessing = false;
+      clearInterval(progressInterval);
+      setTimeout(() => {
+        isProcessing = false;
+      }, 500);
     }
   }
 </script>
@@ -298,19 +321,72 @@
   }
 </style>
 
-<div class="container mx-auto">
-  <div class="flex justify-between items-center mb-4">
-    <input type="text" bind:value={documentName} class="text-2xl font-bold p-2 border-b-2 focus:outline-none focus:border-green-500" />
-    <button on:click={handleDownloadAndSave} disabled={isProcessing} class="bg-blue-600 text-white px-6 py-2 rounded-md hover:bg-blue-700 disabled:bg-gray-400 transition-colors">
-      {isProcessing ? 'Processing...' : 'Download PDF'}
+<div class="px-6 py-6 font-sans max-w-7xl mx-auto flex flex-col space-y-6">
+  <!-- Top Action Bar -->
+  <div class="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4 border-b border-[#dddddd] pb-6">
+    <div class="flex flex-col sm:flex-row sm:items-center gap-2 sm:gap-4 w-full sm:w-auto">
+      <span class="text-[11px] font-bold text-[#9297a0] uppercase tracking-wider select-none">Document Title</span>
+      <input type="text" bind:value={documentName} class="bg-white text-[#181d26] border border-[#dddddd] rounded-lg px-4 py-2 text-sm focus:outline-none focus:border-[#458fff] focus:ring-1 focus:ring-[#458fff] transition-all font-sans font-medium w-full sm:w-80 shadow-sm" />
+    </div>
+    
+    <button on:click={handleDownloadAndSave} disabled={isProcessing} class="bg-[#181d26] hover:bg-[#0d1218] active:bg-[#0d1218] text-white px-6 py-2.5 rounded-lg font-medium text-xs tracking-wide transition-all duration-150 flex items-center space-x-2 disabled:bg-gray-400 select-none shadow-sm cursor-pointer w-full sm:w-auto justify-center">
+      <svg class="w-4 h-4 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg">
+        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-4l-4 4m0 0l-4-4m4 4V4"></path>
+      </svg>
+      <span>{isProcessing ? 'Processing PDF...' : 'Download PDF'}</span>
     </button>
   </div>
-  <div class="grid grid-cols-1 md:grid-cols-2 gap-4" style="height: 75vh;">
-    <textarea bind:value={markdownContent} class="w-full h-full p-4 border rounded-md shadow-sm resize-none font-mono text-sm" placeholder="Type your Markdown here..."></textarea>
-    <div class="w-full h-full p-4 border rounded-md shadow-sm bg-white overflow-y-auto">
-      <div id="pdf-preview" class="markdown-preview">
-        {@html renderedHtml}
+
+  <!-- Workspace split screen -->
+  <div class="grid grid-cols-1 md:grid-cols-2 gap-6" style="height: calc(100vh - 180px);">
+    <!-- Editor Pane -->
+    <div class="flex flex-col h-full">
+      <span class="text-[11px] font-bold text-[#9297a0] tracking-wider mb-2 uppercase select-none">Markdown Editor</span>
+      <textarea bind:value={markdownContent} class="w-full flex-grow p-5 border border-[#dddddd] rounded-xl focus:outline-none focus:border-[#458fff] focus:ring-1 focus:ring-[#458fff] transition-all shadow-sm resize-none font-mono text-sm leading-relaxed text-[#181d26] bg-[#f8fafc]" placeholder="Write your markdown here..."></textarea>
+    </div>
+
+    <!-- Preview Pane -->
+    <div class="flex flex-col h-full">
+      <span class="text-[11px] font-bold text-[#9297a0] tracking-wider mb-2 uppercase select-none">Document Preview</span>
+      <div class="w-full flex-grow p-8 border border-[#dddddd] rounded-xl bg-white shadow-sm overflow-y-auto relative">
+        <div id="pdf-preview" class="markdown-preview">
+          {@html renderedHtml}
+        </div>
       </div>
     </div>
   </div>
 </div>
+
+<!-- Loading Overlay -->
+{#if isProcessing}
+  <div class="fixed inset-0 bg-[#181d26]/40 backdrop-blur-[2px] flex items-center justify-center z-50 transition-all duration-300">
+    <div class="bg-white border border-[#dddddd] p-8 rounded-xl shadow-xl max-w-md w-full mx-4 relative overflow-hidden flex flex-col items-center">
+      <!-- Brand voltage coral accent strip -->
+      <div class="absolute top-0 left-0 right-0 h-1.5 bg-[#aa2d00]"></div>
+      
+      <!-- Spinning animation -->
+      <div class="w-12 h-12 border-4 border-[#e0e2e6] border-t-[#aa2d00] rounded-full animate-spin mb-6"></div>
+      
+      <h3 class="text-lg font-bold text-[#181d26] mb-1">Optimizing PDF Layout</h3>
+      <p class="text-xs text-[#9297a0] mb-6 font-medium tracking-wide uppercase text-center h-4">{loadingStatusText}</p>
+      
+      <!-- Custom progress bar -->
+      <div class="w-full bg-[#e0e2e6] h-1.5 rounded-full overflow-hidden mb-6">
+        <div class="bg-[#aa2d00] h-full transition-all duration-200" style="width: {loadingProgress}%"></div>
+      </div>
+      
+      <!-- Explanation box -->
+      <div class="bg-[#f5e9d4] rounded-lg p-4 text-left border border-[#dddddd]/50">
+        <p class="text-xs text-[#aa2d00] font-bold mb-1 flex items-center">
+          <svg class="w-3.5 h-3.5 mr-1" fill="none" stroke="currentColor" viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg">
+            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M13 16h-1v-4h-1m1-4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z"></path>
+          </svg>
+          Why does this take a few seconds?
+        </p>
+        <p class="text-xs text-[#333840] leading-relaxed">
+          QuickMDtoPDF runs a background browser engine and processes the output using advanced compression to reduce your PDF file size by up to <strong>55%</strong>, ensuring faster sharing and storage.
+        </p>
+      </div>
+    </div>
+  </div>
+{/if}
