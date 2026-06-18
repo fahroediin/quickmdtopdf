@@ -130,3 +130,98 @@ If the login or register requests fail with `failed to fetch` in the browser con
 1. **Paused Free Project**: Supabase automatically pauses inactive free projects. Log into your [Supabase Dashboard](https://supabase.com/dashboard), locate your project, and click **Restore / Resume Project**.
 2. **Environment Configuration**: Ensure your `.env` file is present in the root folder and holds the correct URL and Anon Key.
 
+---
+
+## 🌐 VPS Deployment on Alma Linux (RHEL-based)
+
+Follow these steps to deploy this application to a VPS running **Alma Linux** (e.g., Alma Linux 8 or 9).
+
+### 1. Install Node.js
+First, enable the Node.js 20 module and install Node.js:
+```bash
+sudo dnf module enable nodejs:20 -y
+sudo dnf install nodejs -y
+```
+
+### 2. Install Puppeteer Dependencies (Headless Chromium)
+Puppeteer launches a headless Chromium instance to render PDFs, which requires specific system libraries and fonts. Install them using `dnf`:
+```bash
+sudo dnf install -y alsa-lib atk audit-libs cups-libs dbus-glib libX11 libXcomposite \
+  libXcursor libXdamage libXext libXfixes libXi libXrandr libXrender libXtst pango \
+  xorg-x11-fonts-Type1 xorg-x11-utils fontconfig google-inter-fonts liberation-sans-fonts
+```
+
+### 3. Setup Project on VPS
+Clone the repository, configure the environment variables, and install npm packages:
+```bash
+# Clone
+git clone <your-repository-url>
+cd quickmdtopdf
+
+# Install dependencies (includes @sveltejs/adapter-node)
+npm install
+
+# Configure environment variables
+cp .env.example .env
+nano .env
+```
+Inside `.env`, configure the variables:
+```env
+PUBLIC_SUPABASE_URL=https://your-project-id.supabase.co
+PUBLIC_SUPABASE_ANON_KEY=your-anon-key-here
+PUBLIC_ADMIN_EMAIL=admin@quickmdtopdf.com
+PORT=5173
+HOST=0.0.0.0
+```
+
+### 4. Build the Standalone Server
+Run SvelteKit's build process. SvelteKit is configured with `@sveltejs/adapter-node`, so the production build outputs directly into a folder named `build`:
+```bash
+npm run build
+```
+
+### 5. Run with PM2 (Process Manager)
+Keep the server running in the background and surviving VPS reboots:
+```bash
+# Install PM2 globally
+sudo npm install -g pm2
+
+# Start the application using PM2
+pm2 start build/index.js --name "quickmdtopdf"
+
+# Save PM2 state and enable startup service
+pm2 save
+pm2 startup
+```
+To check logs:
+```bash
+pm2 logs quickmdtopdf
+```
+
+### 6. Reverse Proxy Setup (Nginx)
+To expose the app on port 80/443 (HTTP/HTTPS) and manage SSL certificates:
+```bash
+sudo dnf install nginx -y
+sudo systemctl enable --now nginx
+```
+Configure Nginx (`/etc/nginx/conf.d/quickmdtopdf.conf`):
+```nginx
+server {
+    listen 80;
+    server_name yourdomain.com;
+
+    location / {
+        proxy_pass http://localhost:5173;
+        proxy_http_version 1.1;
+        proxy_set_header Upgrade $http_upgrade;
+        proxy_set_header Connection 'upgrade';
+        proxy_set_header Host $host;
+        proxy_cache_bypass $http_upgrade;
+    }
+}
+```
+Reload Nginx:
+```bash
+sudo systemctl reload nginx
+```
+
