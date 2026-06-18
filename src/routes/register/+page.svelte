@@ -29,13 +29,13 @@
     
     <form on:submit|preventDefault={handleRegister} class="space-y-4">
       <div class="space-y-1">
-        <label class="text-[10px] font-bold text-[#9297a0] uppercase tracking-wider block">Email Address</label>
-        <input type="email" placeholder="email@example.com" bind:value={email} class="w-full p-3 border border-[#dddddd] rounded-lg text-sm bg-white text-[#181d26] focus:outline-none focus:border-[#458fff] focus:ring-1 focus:ring-[#458fff] transition-all font-sans font-medium shadow-sm" required />
+        <label for="register-email" class="text-[10px] font-bold text-[#9297a0] uppercase tracking-wider block">Email Address</label>
+        <input id="register-email" type="email" placeholder="email@example.com" bind:value={email} class="w-full p-3 border border-[#dddddd] rounded-lg text-sm bg-white text-[#181d26] focus:outline-none focus:border-[#458fff] focus:ring-1 focus:ring-[#458fff] transition-all font-sans font-medium shadow-sm" required />
       </div>
       
       <div class="space-y-1">
-        <label class="text-[10px] font-bold text-[#9297a0] uppercase tracking-wider block">Password</label>
-        <input type="password" placeholder="••••••••" bind:value={password} class="w-full p-3 border border-[#dddddd] rounded-lg text-sm bg-white text-[#181d26] focus:outline-none focus:border-[#458fff] focus:ring-1 focus:ring-[#458fff] transition-all font-sans font-medium shadow-sm" required />
+        <label for="register-password" class="text-[10px] font-bold text-[#9297a0] uppercase tracking-wider block">Password</label>
+        <input id="register-password" type="password" placeholder="••••••••" bind:value={password} class="w-full p-3 border border-[#dddddd] rounded-lg text-sm bg-white text-[#181d26] focus:outline-none focus:border-[#458fff] focus:ring-1 focus:ring-[#458fff] transition-all font-sans font-medium shadow-sm" required />
       </div>
       
       <button type="submit" disabled={loading} class="w-full bg-[#181d26] hover:bg-[#0d1218] text-white p-3 rounded-lg font-medium text-xs tracking-wider uppercase transition-colors duration-150 shadow-sm cursor-pointer disabled:bg-gray-400 mt-2 select-none">

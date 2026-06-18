@@ -1,39 +1,132 @@
-# sv
+# QuickMDtoPDF 📄
 
-Everything you need to build a Svelte project, powered by [`sv`](https://github.com/sveltejs/cli).
+QuickMDtoPDF is a premium, high-performance Markdown-to-PDF converter built with SvelteKit, Puppeteer, and `pdf-lib`. It features a quietly editorial workflow UI inspired by **Airtable**'s design guidelines, real-time preview, dynamic export progress animations, and Supabase integration to save and manage documents.
 
-## Creating a project
+---
 
-If you're seeing this, you've probably already done this step. Congrats!
+## ⚡ Features
+- **Airtable Editorial UI**: A clean, white canvas workflow software interface with bold near-black pill CTAs, soft card borders, and elegant typography.
+- **High-Compression PDF Export**: Direct CDP (Chrome DevTools Protocol) print rendering combined with `pdf-lib` stream reconstruction. Reduces PDF file size by up to **55%** while preserving exact font mappings (Segoe UI/system fonts).
+- **Export Progress Overlay**: Visual progress bar and detailed status updates detailing background processing stages (font compression, stream compression).
+- **Supabase Sync**: Secure user registration, login, and dashboard to save, view, and delete documents.
 
-```sh
-# create a new project in the current directory
-npx sv create
+---
 
-# create a new project in my-app
-npx sv create my-app
+## 🚀 Getting Started
+
+### 1. Install Dependencies
+```bash
+npm install
 ```
 
-## Developing
+### 2. Configure Environment Variables
+Copy the `.env.example` template to create your local `.env` file (which is ignored by git):
+```bash
+cp .env.example .env
+```
+Open `.env` and configure your Supabase URL and Anon Key:
+```env
+PUBLIC_SUPABASE_URL=https://your-project-id.supabase.co
+PUBLIC_SUPABASE_ANON_KEY=your-anon-key-here
+```
 
-Once you've created a project and installed dependencies with `npm install` (or `pnpm install` or `yarn`), start a development server:
-
-```sh
+### 3. Run Development Server
+```bash
 npm run dev
+```
+Open the app in your browser at `http://localhost:5173/`.
 
-# or start the server and open the app in a new browser tab
-npm run dev -- --open
+---
+
+## 🗄️ Supabase Database Setup
+
+Run the following SQL queries in your Supabase project's **SQL Editor** to create the `documents` table and configure **Row Level Security (RLS)** policies so users can securely access only their own documents.
+
+### 1. Create Documents Table
+```sql
+-- Create documents table in the public schema
+create table public.documents (
+  id uuid default gen_random_uuid() primary key,
+  user_id uuid references auth.users(id) on delete cascade not null,
+  document_name text not null default 'Untitled Document',
+  markdown_content text not null default '',
+  created_at timestamptz default now() not null
+);
+
+-- Index user_id for faster queries
+create index idx_documents_user_id on public.documents(user_id);
 ```
 
-## Building
+### 2. Configure Row Level Security (RLS)
+```sql
+-- Enable Row Level Security on the table
+alter table public.documents enable row level security;
 
-To create a production version of your app:
+-- Policy: Allow authenticated users to view only their own documents
+create policy "Users can view their own documents"
+on public.documents
+for select
+to authenticated
+using (auth.uid() = user_id);
 
-```sh
-npm run build
+-- Policy: Allow authenticated users to insert their own documents
+create policy "Users can create their own documents"
+on public.documents
+for insert
+to authenticated
+with check (auth.uid() = user_id);
+
+-- Policy: Allow authenticated users to update their own documents
+create policy "Users can update their own documents"
+on public.documents
+for update
+to authenticated
+using (auth.uid() = user_id)
+with check (auth.uid() = user_id);
+
+-- Policy: Allow authenticated users to delete their own documents
+create policy "Users can delete their own documents"
+on public.documents
+for delete
+to authenticated
+using (auth.uid() = user_id);
 ```
 
-You can preview the production build with `npm run preview`.
+### 3. Create PDF Usage Logs Table & RLS
+Run this query to set up logging of PDF generation events (tracking both registered and anonymous usages):
+```sql
+-- Create pdf_usage_logs table in the public schema
+create table public.pdf_usage_logs (
+  id uuid default gen_random_uuid() primary key,
+  user_id uuid references auth.users(id) on delete set null,
+  is_anonymous boolean default true not null,
+  created_at timestamptz default now() not null
+);
 
-> To deploy your app, you may need to install an [adapter](https://svelte.dev/docs/kit/adapters) for your target environment.
-# quickmdtopdf
+-- Enable Row Level Security
+alter table public.pdf_usage_logs enable row level security;
+
+-- Policy: Allow anyone (authenticated and anonymous) to log usage
+create policy "Enable insert for all users including anon"
+on public.pdf_usage_logs
+for insert
+to public
+with check (true);
+
+-- Policy: Allow authenticated users to view logs (admin filtering is managed at the API layer)
+create policy "Enable select for authenticated users"
+on public.pdf_usage_logs
+for select
+to authenticated
+using (true);
+```
+
+---
+
+## 🛠️ Troubleshooting
+
+### Error: `failed to fetch` (Supabase Connection Error)
+If the login or register requests fail with `failed to fetch` in the browser console:
+1. **Paused Free Project**: Supabase automatically pauses inactive free projects. Log into your [Supabase Dashboard](https://supabase.com/dashboard), locate your project, and click **Restore / Resume Project**.
+2. **Environment Configuration**: Ensure your `.env` file is present in the root folder and holds the correct URL and Anon Key.
+

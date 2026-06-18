@@ -3,6 +3,7 @@
 import puppeteer from 'puppeteer';
 import markdownit from 'markdown-it';
 import { PDFDocument } from 'pdf-lib';
+import { supabase } from '$lib/supabaseClient.js';
 
 // Inisialisasi markdown-it dengan opsi lengkap
 const md = markdownit({
@@ -447,6 +448,39 @@ export async function POST({ request }) {
 
     // Post-process: kompres PDF menggunakan pdf-lib
     const optimizedPdf = await compressPdf(pdfBuffer);
+
+    // Log PDF usage asynchronously (non-blocking)
+    (async () => {
+      let userId = null;
+      let isAnonymous = true;
+      const authHeader = request.headers.get('Authorization');
+      if (authHeader && authHeader.startsWith('Bearer ')) {
+        const token = authHeader.substring(7);
+        try {
+          const { data: { user: authedUser } } = await supabase.auth.getUser(token);
+          if (authedUser) {
+            userId = authedUser.id;
+            isAnonymous = false;
+          }
+        } catch (err) {
+          console.warn('Failed to verify token for pdf_usage_logs:', err.message);
+        }
+      }
+      
+      try {
+        const { error: logError } = await supabase.from('pdf_usage_logs').insert({
+          user_id: userId,
+          is_anonymous: isAnonymous
+        });
+        if (logError) {
+          console.error('Failed to log PDF usage in pdf_usage_logs:', logError.message);
+        } else {
+          console.log(`PDF usage logged successfully. Anonymous: ${isAnonymous}, User: ${userId}`);
+        }
+      } catch (err) {
+        console.error('Error inserting pdf_usage_logs:', err.message);
+      }
+    })();
 
     return new Response(optimizedPdf, {
       status: 200,

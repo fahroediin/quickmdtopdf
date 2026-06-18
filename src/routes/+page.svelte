@@ -52,12 +52,21 @@
     }, 150);
     
     try {
+      const headers = {
+        'Content-Type': 'application/json',
+      };
+      
+      if ($user) {
+        const { data: { session } } = await supabase.auth.getSession();
+        if (session?.access_token) {
+          headers['Authorization'] = `Bearer ${session.access_token}`;
+        }
+      }
+
       // Kirim Markdown ke backend API kita
       const response = await fetch('/api/generate-pdf', {
         method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-        },
+        headers,
         body: JSON.stringify({ markdown: markdownContent }),
       });
 
