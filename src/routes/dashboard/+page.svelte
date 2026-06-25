@@ -82,7 +82,9 @@
         {#each documents as doc (doc.id)}
           <li class="p-5 flex justify-between items-center hover:bg-[#f8fafc] transition-colors duration-100">
             <div class="space-y-1">
-              <p class="font-bold text-sm text-[#181d26] tracking-tight">{doc.document_name}</p>
+              <a href="/?id={doc.id}" class="font-bold text-sm text-[#181d26] hover:text-[#aa2d00] hover:underline tracking-tight transition-colors">
+                {doc.document_name}
+              </a>
               <p class="text-[11px] text-[#9297a0] font-medium uppercase tracking-wider">
                 Saved on: {new Date(doc.created_at).toLocaleDateString(undefined, { year: 'numeric', month: 'short', day: 'numeric' })}
               </p>
@@ -90,6 +92,9 @@
             
             <div class="flex items-center space-x-4">
               <!-- Inline Link to go to workspace or delete -->
+              <a href="/?id={doc.id}" class="text-xs font-semibold text-[#181d26] hover:underline cursor-pointer select-none">
+                Open & Edit
+              </a>
               <button on:click={() => deleteDocument(doc.id)} class="text-xs font-semibold text-[#aa2d00] hover:underline cursor-pointer select-none">
                 Delete
               </button>

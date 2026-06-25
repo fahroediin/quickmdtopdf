@@ -12,6 +12,9 @@
   let isProcessing = false;
   let loadingStatusText = 'Initiating export...';
   let loadingProgress = 5;
+  let currentDocumentId = null;
+  let isDocLoading = false;
+  let isSaving = false;
 
   // Konfigurasi markdown-it SAMA dengan server
   const md = markdownit({
@@ -24,8 +27,55 @@
     renderedHtml = md.render(content);
   }
 
-  onMount(() => {
+  onMount(async () => {
     renderMarkdown(markdownContent);
+
+    const urlParams = new URLSearchParams(window.location.search);
+    const docId = urlParams.get('id');
+
+    if (docId) {
+      isDocLoading = true;
+      try {
+        let sessionUser = $user;
+        if (!sessionUser) {
+          const { data: { session } } = await supabase.auth.getSession();
+          sessionUser = session?.user;
+          if (sessionUser) {
+            user.set(sessionUser);
+          }
+        }
+
+        if (!sessionUser) {
+          alert('You must be logged in to view this document.');
+          window.location.href = '/login';
+          return;
+        }
+
+        const { data, error } = await supabase
+          .from('documents')
+          .select('*')
+          .eq('id', docId)
+          .eq('user_id', sessionUser.id)
+          .single();
+
+        if (error || !data) {
+          console.error('Error fetching document:', error);
+          alert('Document not found or access denied.');
+          const newUrl = new URL(window.location.href);
+          newUrl.searchParams.delete('id');
+          window.history.replaceState({}, '', newUrl);
+        } else {
+          documentName = data.document_name;
+          markdownContent = data.markdown_content;
+          currentDocumentId = data.id;
+          renderMarkdown(markdownContent);
+        }
+      } catch (err) {
+        console.error('Failed to load document:', err);
+      } finally {
+        isDocLoading = false;
+      }
+    }
   });
 
   $: renderMarkdown(markdownContent);
@@ -98,14 +148,34 @@
 
       // Logika penyimpanan ke Supabase
       if ($user) {
-        const { error } = await supabase
-          .from('documents')
-          .insert({
-            user_id: $user.id,
-            document_name: documentName,
-            markdown_content: markdownContent
-          });
-        if (error) throw error;
+        if (currentDocumentId) {
+          const { error } = await supabase
+            .from('documents')
+            .update({
+              document_name: documentName,
+              markdown_content: markdownContent
+            })
+            .eq('id', currentDocumentId)
+            .eq('user_id', $user.id);
+          if (error) throw error;
+        } else {
+          const { data, error } = await supabase
+            .from('documents')
+            .insert({
+              user_id: $user.id,
+              document_name: documentName,
+              markdown_content: markdownContent
+            })
+            .select()
+            .single();
+          if (error) throw error;
+          if (data) {
+            currentDocumentId = data.id;
+            const newUrl = new URL(window.location.href);
+            newUrl.searchParams.set('id', data.id);
+            window.history.replaceState({}, '', newUrl);
+          }
+        }
       }
 
     } catch (error) {
@@ -116,6 +186,47 @@
       setTimeout(() => {
         isProcessing = false;
       }, 500);
+    }
+  }
+
+  async function handleSaveOnly() {
+    if (!$user) return;
+    isSaving = true;
+    try {
+      if (currentDocumentId) {
+        const { error } = await supabase
+          .from('documents')
+          .update({
+            document_name: documentName,
+            markdown_content: markdownContent
+          })
+          .eq('id', currentDocumentId)
+          .eq('user_id', $user.id);
+        if (error) throw error;
+      } else {
+        const { data, error } = await supabase
+          .from('documents')
+          .insert({
+            user_id: $user.id,
+            document_name: documentName,
+            markdown_content: markdownContent
+          })
+          .select()
+          .single();
+        if (error) throw error;
+        if (data) {
+          currentDocumentId = data.id;
+          const newUrl = new URL(window.location.href);
+          newUrl.searchParams.set('id', data.id);
+          window.history.replaceState({}, '', newUrl);
+        }
+      }
+      alert('Document saved successfully!');
+    } catch (error) {
+      console.error('Error saving document:', error);
+      alert(`Failed to save document: ${error.message}`);
+    } finally {
+      isSaving = false;
     }
   }
 </script>
@@ -338,12 +449,23 @@
       <input type="text" bind:value={documentName} class="bg-white text-[#181d26] border border-[#dddddd] rounded-lg px-4 py-2 text-sm focus:outline-none focus:border-[#458fff] focus:ring-1 focus:ring-[#458fff] transition-all font-sans font-medium w-full sm:w-80 shadow-sm" />
     </div>
     
-    <button on:click={handleDownloadAndSave} disabled={isProcessing} class="bg-[#181d26] hover:bg-[#0d1218] active:bg-[#0d1218] text-white px-6 py-2.5 rounded-lg font-medium text-xs tracking-wide transition-all duration-150 flex items-center space-x-2 disabled:bg-gray-400 select-none shadow-sm cursor-pointer w-full sm:w-auto justify-center">
-      <svg class="w-4 h-4 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg">
-        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-4l-4 4m0 0l-4-4m4 4V4"></path>
-      </svg>
-      <span>{isProcessing ? 'Processing PDF...' : 'Download PDF'}</span>
-    </button>
+    <div class="flex flex-col sm:flex-row items-center gap-3 w-full sm:w-auto">
+      {#if $user}
+        <button on:click={handleSaveOnly} disabled={isProcessing || isSaving} class="bg-white hover:bg-[#f8fafc] text-[#181d26] border border-[#dddddd] px-6 py-2.5 rounded-lg font-medium text-xs tracking-wide transition-all duration-150 flex items-center space-x-2 disabled:bg-gray-100 disabled:text-gray-400 select-none shadow-sm cursor-pointer w-full sm:w-auto justify-center">
+          <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg">
+            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M8 7H5a2 2 0 00-2 2v9a2 2 0 002 2h14a2 2 0 002-2V9a2 2 0 00-2-2h-3m-1 4l-3 3m0 0l-3-3m3 3V4"></path>
+          </svg>
+          <span>{isSaving ? 'Saving...' : 'Save Document'}</span>
+        </button>
+      {/if}
+      
+      <button on:click={handleDownloadAndSave} disabled={isProcessing || isSaving} class="bg-[#181d26] hover:bg-[#0d1218] active:bg-[#0d1218] text-white px-6 py-2.5 rounded-lg font-medium text-xs tracking-wide transition-all duration-150 flex items-center space-x-2 disabled:bg-gray-400 select-none shadow-sm cursor-pointer w-full sm:w-auto justify-center">
+        <svg class="w-4 h-4 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg">
+          <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-4l-4 4m0 0l-4-4m4 4V4"></path>
+        </svg>
+        <span>{isProcessing ? 'Processing PDF...' : 'Download PDF'}</span>
+      </button>
+    </div>
   </div>
 
   <!-- Workspace split screen -->
@@ -396,6 +518,15 @@
           QuickMDtoPDF runs a background browser engine and processes the output using advanced compression to reduce your PDF file size by up to <strong>55%</strong>, ensuring faster sharing and storage.
         </p>
       </div>
+    </div>
+  </div>
+{/if}
+
+{#if isDocLoading}
+  <div class="fixed inset-0 bg-white flex flex-col items-center justify-center z-50">
+    <div class="flex flex-col items-center space-y-4">
+      <div class="w-10 h-10 border-4 border-gray-200 border-t-[#181d26] rounded-full animate-spin"></div>
+      <p class="text-sm font-medium text-[#181d26]">Loading document...</p>
     </div>
   </div>
 {/if}
