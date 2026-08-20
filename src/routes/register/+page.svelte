@@ -20,7 +20,13 @@
         }
       });
       if (error) {
-        message = error.message;
+        if (error.message.toLowerCase().includes('already registered') || error.message.toLowerCase().includes('already exists')) {
+          message = 'Email ini sudah terdaftar. Silakan login.';
+        } else {
+          message = error.message;
+        }
+      } else if (data?.user && (!data.user.identities || data.user.identities.length === 0)) {
+        message = 'Email ini sudah terdaftar. Silakan login.';
       } else {
         if (data?.session) {
           window.location.href = '/dashboard';
