@@ -21,12 +21,12 @@
       });
       if (error) {
         if (error.message.toLowerCase().includes('already registered') || error.message.toLowerCase().includes('already exists')) {
-          message = 'Email ini sudah terdaftar. Silakan login.';
+          message = 'This email is already registered. Please login.';
         } else {
           message = error.message;
         }
       } else if (data?.user && (!data.user.identities || data.user.identities.length === 0)) {
-        message = 'Email ini sudah terdaftar. Silakan login.';
+        message = 'This email is already registered. Please login.';
       } else {
         if (data?.session) {
           window.location.href = '/dashboard';
