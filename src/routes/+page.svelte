@@ -471,13 +471,13 @@
   <!-- Workspace split screen -->
   <div class="grid grid-cols-1 md:grid-cols-2 gap-6" style="height: calc(100vh - 180px);">
     <!-- Editor Pane -->
-    <div class="flex flex-col h-full">
+    <div class="flex flex-col h-full min-h-0">
       <span class="text-[11px] font-bold text-[#9297a0] tracking-wider mb-2 uppercase select-none">Markdown Editor</span>
-      <textarea bind:value={markdownContent} class="w-full flex-grow p-5 border border-[#dddddd] rounded-xl focus:outline-none focus:border-[#458fff] focus:ring-1 focus:ring-[#458fff] transition-all shadow-sm resize-none font-mono text-sm leading-relaxed text-[#181d26] bg-[#f8fafc]" placeholder="Write your markdown here..."></textarea>
+      <textarea bind:value={markdownContent} class="w-full flex-grow p-5 border border-[#dddddd] rounded-xl focus:outline-none focus:border-[#458fff] focus:ring-1 focus:ring-[#458fff] transition-all shadow-sm resize-none font-mono text-sm leading-relaxed text-[#181d26] bg-[#f8fafc] overflow-y-auto" placeholder="Write your markdown here..."></textarea>
     </div>
 
     <!-- Preview Pane -->
-    <div class="flex flex-col h-full">
+    <div class="flex flex-col h-full min-h-0">
       <span class="text-[11px] font-bold text-[#9297a0] tracking-wider mb-2 uppercase select-none">Document Preview</span>
       <div class="w-full flex-grow p-8 border border-[#dddddd] rounded-xl bg-white shadow-sm overflow-y-auto relative">
         <div id="pdf-preview" class="markdown-preview">
