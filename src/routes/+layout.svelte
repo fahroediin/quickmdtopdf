@@ -40,6 +40,7 @@
     <nav class="font-sans text-sm">
       {#if $user}
         <div class="flex items-center space-x-6">
+          <span class="text-xs text-[#8a8d94] font-medium select-none hidden sm:inline-block">Logged in as: <strong class="text-[#333840] font-semibold">{$user.email}</strong></span>
           <a href="/dashboard" class="text-[#333840] hover:text-[#181d26] font-medium transition-colors">My Documents</a>
           <button on:click={handleLogout} class="bg-white border border-[#dddddd] text-[#333840] hover:bg-[#f8fafc] px-4 py-2 rounded-lg font-medium transition-colors duration-150 text-xs">
             Logout
