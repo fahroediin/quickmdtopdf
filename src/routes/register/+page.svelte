@@ -21,7 +21,13 @@
       if (error) {
         message = error.message;
       } else {
-        successMessage = 'Registration successful! Please check your email to verify your account.';
+        if (data?.session) {
+          window.location.href = '/dashboard';
+        } else {
+          successMessage = 'Registration successful! Please check your email to verify your account.';
+          email = '';
+          password = '';
+        }
       }
     } catch (err) {
       console.error(err);
