@@ -10,19 +10,25 @@
     loading = true;
     message = '';
     successMessage = '';
-    const { data, error } = await supabase.auth.signUp({
-      email,
-      password,
-      options: {
-        emailRedirectTo: `${window.location.origin}/`
+    try {
+      const { data, error } = await supabase.auth.signUp({
+        email,
+        password,
+        options: {
+          emailRedirectTo: `${window.location.origin}/`
+        }
+      });
+      if (error) {
+        message = error.message;
+      } else {
+        successMessage = 'Registration successful! Please check your email to verify your account.';
       }
-    });
-    if (error) {
-      message = error.message;
-    } else {
-      successMessage = 'Registration successful! Please check your email to verify your account.';
+    } catch (err) {
+      console.error(err);
+      message = err.message || 'An unexpected error occurred during signup.';
+    } finally {
+      loading = false;
     }
-    loading = false;
   }
 </script>
 
