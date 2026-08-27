@@ -98,12 +98,14 @@ export async function POST({ request }) {
     }
 
     let markdown = '';
+    let bodyFilename = '';
     const contentType = request.headers.get('content-type') || '';
 
     try {
       if (contentType.includes('application/json')) {
         const body = await request.json();
         markdown = body.markdown;
+        bodyFilename = body.filename;
       } else {
         markdown = await request.text();
       }
@@ -119,6 +121,39 @@ export async function POST({ request }) {
         status: 400,
         headers: { 'Content-Type': 'application/json' }
       });
+    }
+
+    // Determine download filename
+    function extractHeadingTitle(mdText) {
+      if (!mdText) return 'document';
+      const lines = mdText.split('\n');
+      for (let line of lines) {
+        line = line.trim();
+        if (line.startsWith('#')) {
+          let title = line.replace(/^#+\s*/, '').trim();
+          title = title.replace(/^(intelligence brief|company profile|profile|laporan)\s*:\s*/i, '');
+          title = title.replace(/[/\\?%*:|"<>]/g, '-').trim();
+          return title;
+        }
+      }
+      return 'document';
+    }
+
+    const months = [
+      'Januari', 'Februari', 'Maret', 'April', 'Mei', 'Juni',
+      'Juli', 'Agustus', 'September', 'Oktober', 'November', 'Desember'
+    ];
+    const today = new Date();
+    const dd = String(today.getDate()).padStart(2, '0');
+    const mmmm = months[today.getMonth()];
+    const yyyy = today.getFullYear();
+    const currentDateString = `${dd}-${mmmm}-${yyyy}`;
+
+    let rawFilename = request.headers.get('x-filename') || bodyFilename || extractHeadingTitle(markdown);
+    let downloadFileName = rawFilename.trim().replace(/\s+/g, '_');
+    const dateRegex = /_\d{2}-[a-zA-Z\u00C0-\u017F]+-\d{4}$/;
+    if (!dateRegex.test(downloadFileName)) {
+      downloadFileName = `${downloadFileName}_${currentDateString}`;
     }
 
     const contentHtml = md.render(markdown);
@@ -532,7 +567,7 @@ export async function POST({ request }) {
       status: 200,
       headers: {
         'Content-Type': 'application/pdf',
-        'Content-Disposition': 'attachment; filename="document.pdf"'
+        'Content-Disposition': `attachment; filename="${downloadFileName}.pdf"`
       }
     });
 

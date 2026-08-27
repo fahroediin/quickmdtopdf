@@ -5,6 +5,7 @@
   import { supabase } from '$lib/supabaseClient';
   import { user } from '$lib/stores.js';
   import sampleMarkdown from '$lib/sample.md?raw';
+  import { env } from '$env/dynamic/public';
 
   let markdownContent = sampleMarkdown;
   let renderedHtml = '';
@@ -15,6 +16,37 @@
   let currentDocumentId = null;
   let isDocLoading = false;
   let isSaving = false;
+  let isTitleManuallyEdited = false;
+  
+  const googleClientId = env.PUBLIC_GOOGLE_CLIENT_ID;
+  let isUploadingToDrive = false;
+  let gdriveLink = '';
+  let showDriveInstructions = false;
+
+  function extractDocumentName(mdText) {
+    if (!mdText) return '';
+    const lines = mdText.split('\n');
+    for (let line of lines) {
+      line = line.trim();
+      if (line.startsWith('#')) {
+        // Strip # and trim
+        let title = line.replace(/^#+\s*/, '').trim();
+        // Remove common profiling titles prefixes
+        title = title.replace(/^(intelligence brief|company profile|profile|laporan)\s*:\s*/i, '');
+        // Replace invalid filename characters
+        title = title.replace(/[/\\?%*:|"<>]/g, '-').trim();
+        return title;
+      }
+    }
+    return '';
+  }
+
+  $: if (!isTitleManuallyEdited && markdownContent) {
+    const extracted = extractDocumentName(markdownContent);
+    if (extracted) {
+      documentName = extracted;
+    }
+  }
 
   // Konfigurasi markdown-it SAMA dengan server
   const md = markdownit({
@@ -28,6 +60,15 @@
   }
 
   onMount(async () => {
+    // Load Google Identity Services script
+    if (typeof window !== 'undefined' && !window.google) {
+      const script = document.createElement('script');
+      script.src = 'https://accounts.google.com/gsi/client';
+      script.async = true;
+      script.defer = true;
+      document.head.appendChild(script);
+    }
+
     renderMarkdown(markdownContent);
 
     const urlParams = new URLSearchParams(window.location.search);
@@ -68,6 +109,7 @@
           documentName = data.document_name;
           markdownContent = data.markdown_content;
           currentDocumentId = data.id;
+          isTitleManuallyEdited = true;
           renderMarkdown(markdownContent);
         }
       } catch (err) {
@@ -138,7 +180,27 @@
       const a = document.createElement('a');
       a.style.display = 'none';
       a.href = url;
-      a.download = `${documentName}.pdf`;
+      // Get today's date formatted as DD-MMMM-YYYY (e.g. 28-Agustus-2026)
+      const months = [
+        'Januari', 'Februari', 'Maret', 'April', 'Mei', 'Juni',
+        'Juli', 'Agustus', 'September', 'Oktober', 'November', 'Desember'
+      ];
+      const today = new Date();
+      const dd = String(today.getDate()).padStart(2, '0');
+      const mmmm = months[today.getMonth()];
+      const yyyy = today.getFullYear();
+      const currentDateString = `${dd}-${mmmm}-${yyyy}`;
+      
+      // Normalize filename spacing to underscores
+      let downloadFileName = documentName.trim().replace(/\s+/g, '_');
+      
+      // Append date if not already present
+      const dateRegex = /_\d{2}-[a-zA-Z\u00C0-\u017F]+-\d{4}$/;
+      if (!dateRegex.test(downloadFileName)) {
+        downloadFileName = `${downloadFileName}_${currentDateString}`;
+      }
+
+      a.download = `${downloadFileName}.pdf`;
       document.body.appendChild(a);
       a.click();
       
@@ -227,6 +289,130 @@
       alert(`Failed to save document: ${error.message}`);
     } finally {
       isSaving = false;
+    }
+  }
+
+  async function handleUploadToDrive() {
+    if (!googleClientId) {
+      showDriveInstructions = true;
+      return;
+    }
+
+    isUploadingToDrive = true;
+    try {
+      // 1. Generate the PDF blob by hitting our backend API
+      loadingStatusText = 'Generating PDF for Google Drive...';
+      const headers = {
+        'Content-Type': 'application/json',
+      };
+      
+      if ($user) {
+        const { data: { session } } = await supabase.auth.getSession();
+        if (session?.access_token) {
+          headers['Authorization'] = `Bearer ${session.access_token}`;
+        }
+      }
+
+      const pdfResponse = await fetch('/api/generate-pdf', {
+        method: 'POST',
+        headers,
+        body: JSON.stringify({ markdown: markdownContent }),
+      });
+
+      if (!pdfResponse.ok) {
+        throw new Error('Failed to generate PDF for upload.');
+      }
+
+      const pdfBlob = await pdfResponse.blob();
+
+      // Get today's date formatted as DD-MMMM-YYYY
+      const months = [
+        'Januari', 'Februari', 'Maret', 'April', 'Mei', 'Juni',
+        'Juli', 'Agustus', 'September', 'Oktober', 'November', 'Desember'
+      ];
+      const today = new Date();
+      const dd = String(today.getDate()).padStart(2, '0');
+      const mmmm = months[today.getMonth()];
+      const yyyy = today.getFullYear();
+      const currentDateString = `${dd}-${mmmm}-${yyyy}`;
+      
+      // Normalize filename spacing to underscores
+      let uploadFileName = documentName.trim().replace(/\s+/g, '_');
+      
+      const dateRegex = /_\d{2}-[a-zA-Z\u00C0-\u017F]+-\d{4}$/;
+      if (!dateRegex.test(uploadFileName)) {
+        uploadFileName = `${uploadFileName}_${currentDateString}`;
+      }
+
+      const finalFilename = `${uploadFileName}.pdf`;
+
+      // 2. Request Google OAuth Token using Google Identity Services (GIS)
+      if (typeof window.google === 'undefined') {
+        throw new Error('Google Identity Services library not loaded yet. Please wait a moment and try again.');
+      }
+
+      const tokenClient = window.google.accounts.oauth2.initTokenClient({
+        client_id: googleClientId,
+        scope: 'https://www.googleapis.com/auth/drive.file',
+        callback: async (tokenResponse) => {
+          if (tokenResponse.error !== undefined) {
+            isUploadingToDrive = false;
+            console.error('Google OAuth error:', tokenResponse);
+            alert(`Google authentication failed: ${tokenResponse.error}`);
+            return;
+          }
+
+          const accessToken = tokenResponse.access_token;
+          loadingStatusText = 'Uploading PDF to Google Drive...';
+
+          try {
+            // 3. Upload to Google Drive using multipart upload
+            const metadata = {
+              name: finalFilename,
+              mimeType: 'application/pdf',
+            };
+
+            const formData = new FormData();
+            formData.append(
+              'metadata',
+              new Blob([JSON.stringify(metadata)], { type: 'application/json' })
+            );
+            formData.append('file', pdfBlob);
+
+            const uploadResponse = await fetch(
+              'https://www.googleapis.com/upload/drive/v3/files?uploadType=multipart&fields=id,name,webViewLink',
+              {
+                method: 'POST',
+                headers: {
+                  Authorization: `Bearer ${accessToken}`,
+                },
+                body: formData,
+              }
+            );
+
+            if (!uploadResponse.ok) {
+              const errDetails = await uploadResponse.text();
+              throw new Error(`GDrive upload HTTP error: ${uploadResponse.status} - ${errDetails}`);
+            }
+
+            const fileData = await uploadResponse.json();
+            gdriveLink = fileData.webViewLink;
+            alert('File uploaded to Google Drive successfully!');
+          } catch (uploadErr) {
+            console.error('Error uploading to GDrive:', uploadErr);
+            alert(`Failed to upload to Google Drive: ${uploadErr.message}`);
+          } finally {
+            isUploadingToDrive = false;
+          }
+        },
+      });
+
+      tokenClient.requestAccessToken({ prompt: 'consent' });
+
+    } catch (err) {
+      console.error(err);
+      alert(`Google Drive Upload failed: ${err.message}`);
+      isUploadingToDrive = false;
     }
   }
 </script>
@@ -442,24 +628,82 @@
 </style>
 
 <div class="px-6 py-6 font-sans max-w-7xl mx-auto flex flex-col space-y-6">
+  <!-- Google Drive Alert Banner -->
+  {#if gdriveLink}
+    <div class="bg-[#e8f0fe] border border-[#1a73e8]/30 rounded-xl p-4 flex flex-col sm:flex-row justify-between items-start sm:items-center gap-3 shadow-sm">
+      <div class="flex items-center space-x-3">
+        <div class="bg-[#1a73e8] text-white p-2 rounded-lg">
+          <svg class="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M5 13l4 4L19 7" />
+          </svg>
+        </div>
+        <div>
+          <h4 class="text-sm font-bold text-[#181d26]">Uploaded to Google Drive successfully!</h4>
+          <p class="text-xs text-[#1a73e8] font-medium truncate max-w-lg">{gdriveLink}</p>
+        </div>
+      </div>
+      <div class="flex items-center space-x-2 w-full sm:w-auto">
+        <button on:click={() => { navigator.clipboard.writeText(gdriveLink); alert('Link copied to clipboard!'); }} class="bg-[#1a73e8] hover:bg-[#1557b0] text-white px-4 py-2 rounded-lg font-medium text-xs tracking-wide transition-all shadow-sm cursor-pointer select-none w-full sm:w-auto text-center">
+          Copy Link
+        </button>
+        <button on:click={() => gdriveLink = ''} class="bg-white hover:bg-gray-100 text-gray-500 border border-[#dddddd] px-3 py-2 rounded-lg font-medium text-xs transition-all shadow-sm cursor-pointer select-none">
+          Dismiss
+        </button>
+      </div>
+    </div>
+  {/if}
+
+  <!-- Google Drive Instructions Modal -->
+  {#if showDriveInstructions}
+    <div class="fixed inset-0 bg-[#181d26]/60 backdrop-blur-sm z-50 flex items-center justify-center p-4">
+      <div class="bg-white border border-[#dddddd] rounded-2xl shadow-xl max-w-md w-full p-6 relative overflow-hidden">
+        <div class="absolute top-0 left-0 right-0 h-1 bg-[#1a73e8]"></div>
+        <h3 class="text-base font-bold text-[#181d26] mb-2">Google Drive Integration Not Configured</h3>
+        <p class="text-xs text-[#8a8d94] leading-relaxed mb-4">
+          To enable Google Drive upload, you need to configure a Google OAuth Client ID in your application configuration.
+        </p>
+        <div class="bg-gray-50 border border-[#dddddd] p-3 rounded-lg text-left text-[11px] text-[#333840] space-y-2 mb-6 font-mono">
+          <p class="font-bold text-gray-600 uppercase tracking-wider text-[10px]">Setup Instructions:</p>
+          <p>1. Open Google Cloud Console.</p>
+          <p>2. Enable the Google Drive API.</p>
+          <p>3. Create an OAuth 2.0 Client ID for your Web Application domain.</p>
+          <p>4. Add this line to your .env file:</p>
+          <p class="text-[#aa2d00] font-semibold bg-white p-1 border border-dashed border-gray-300 rounded">PUBLIC_GOOGLE_CLIENT_ID=your_client_id.apps.googleusercontent.com</p>
+        </div>
+        <div class="flex justify-end space-x-2">
+          <button on:click={() => showDriveInstructions = false} class="bg-[#181d26] hover:bg-[#0d1218] text-white px-5 py-2.5 rounded-lg text-xs font-semibold tracking-wide transition-all shadow-sm cursor-pointer">
+            Close
+          </button>
+        </div>
+      </div>
+    </div>
+  {/if}
+
   <!-- Top Action Bar -->
   <div class="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4 border-b border-[#dddddd] pb-6">
     <div class="flex flex-col sm:flex-row sm:items-center gap-2 sm:gap-4 w-full sm:w-auto">
       <span class="text-[11px] font-bold text-[#9297a0] uppercase tracking-wider select-none">Document Title</span>
-      <input type="text" bind:value={documentName} class="bg-white text-[#181d26] border border-[#dddddd] rounded-lg px-4 py-2 text-sm focus:outline-none focus:border-[#458fff] focus:ring-1 focus:ring-[#458fff] transition-all font-sans font-medium w-full sm:w-80 shadow-sm" />
+      <input type="text" bind:value={documentName} on:input={() => isTitleManuallyEdited = true} class="bg-white text-[#181d26] border border-[#dddddd] rounded-lg px-4 py-2 text-sm focus:outline-none focus:border-[#458fff] focus:ring-1 focus:ring-[#458fff] transition-all font-sans font-medium w-full sm:w-80 shadow-sm" />
     </div>
     
     <div class="flex flex-col sm:flex-row items-center gap-3 w-full sm:w-auto">
       {#if $user}
-        <button on:click={handleSaveOnly} disabled={isProcessing || isSaving} class="bg-white hover:bg-[#f8fafc] text-[#181d26] border border-[#dddddd] px-6 py-2.5 rounded-lg font-medium text-xs tracking-wide transition-all duration-150 flex items-center space-x-2 disabled:bg-gray-100 disabled:text-gray-400 select-none shadow-sm cursor-pointer w-full sm:w-auto justify-center">
+        <button on:click={handleSaveOnly} disabled={isProcessing || isSaving || isUploadingToDrive} class="bg-white hover:bg-[#f8fafc] text-[#181d26] border border-[#dddddd] px-6 py-2.5 rounded-lg font-medium text-xs tracking-wide transition-all duration-150 flex items-center space-x-2 disabled:bg-gray-100 disabled:text-gray-400 select-none shadow-sm cursor-pointer w-full sm:w-auto justify-center">
           <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg">
             <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M8 7H5a2 2 0 00-2 2v9a2 2 0 002 2h14a2 2 0 002-2V9a2 2 0 00-2-2h-3m-1 4l-3 3m0 0l-3-3m3 3V4"></path>
           </svg>
           <span>{isSaving ? 'Saving...' : 'Save Document'}</span>
         </button>
+
+        <button on:click={handleUploadToDrive} disabled={isProcessing || isSaving || isUploadingToDrive} class="bg-white hover:bg-[#f8fafc] text-[#1a73e8] border border-[#1a73e8]/30 px-6 py-2.5 rounded-lg font-medium text-xs tracking-wide transition-all duration-150 flex items-center space-x-2 disabled:bg-gray-100 disabled:text-gray-400 select-none shadow-sm cursor-pointer w-full sm:w-auto justify-center">
+          <svg class="w-4 h-4 text-[#1a73e8]" fill="none" stroke="currentColor" viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg">
+            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-8l-4-4m0 0L8 8m4-4v12" />
+          </svg>
+          <span>{isUploadingToDrive ? 'Uploading...' : 'Upload to GDrive'}</span>
+        </button>
       {/if}
       
-      <button on:click={handleDownloadAndSave} disabled={isProcessing || isSaving} class="bg-[#181d26] hover:bg-[#0d1218] active:bg-[#0d1218] text-white px-6 py-2.5 rounded-lg font-medium text-xs tracking-wide transition-all duration-150 flex items-center space-x-2 disabled:bg-gray-400 select-none shadow-sm cursor-pointer w-full sm:w-auto justify-center">
+      <button on:click={handleDownloadAndSave} disabled={isProcessing || isSaving || isUploadingToDrive} class="bg-[#181d26] hover:bg-[#0d1218] active:bg-[#0d1218] text-white px-6 py-2.5 rounded-lg font-medium text-xs tracking-wide transition-all duration-150 flex items-center space-x-2 disabled:bg-gray-400 select-none shadow-sm cursor-pointer w-full sm:w-auto justify-center">
         <svg class="w-4 h-4 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg">
           <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-4l-4 4m0 0l-4-4m4 4V4"></path>
         </svg>
