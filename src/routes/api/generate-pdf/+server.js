@@ -97,9 +97,24 @@ export async function POST({ request }) {
       });
     }
 
-    const { markdown } = await request.json();
+    let markdown = '';
+    const contentType = request.headers.get('content-type') || '';
 
-    if (!markdown || typeof markdown !== 'string') {
+    try {
+      if (contentType.includes('application/json')) {
+        const body = await request.json();
+        markdown = body.markdown;
+      } else {
+        markdown = await request.text();
+      }
+    } catch (err) {
+      return new Response(JSON.stringify({ error: 'Failed to read request body. For JSON, ensure content-type is application/json and body is valid JSON.' }), {
+        status: 400,
+        headers: { 'Content-Type': 'application/json' }
+      });
+    }
+
+    if (!markdown || typeof markdown !== 'string' || markdown.trim() === '') {
       return new Response(JSON.stringify({ error: 'Markdown content is required' }), {
         status: 400,
         headers: { 'Content-Type': 'application/json' }
