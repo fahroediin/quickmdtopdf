@@ -22,24 +22,6 @@
   let isUploadingToDrive = false;
   let gdriveLink = '';
   let showDriveInstructions = false;
-  let gdriveFolderUrl = '';
-  let showDriveSettings = false;
-
-  function extractFolderId(urlOrId) {
-    if (!urlOrId) return null;
-    const trimmed = urlOrId.trim();
-    if (trimmed.includes('drive.google.com')) {
-      const match = trimmed.match(/\/folders\/([a-zA-Z0-9-_]+)/);
-      return match ? match[1] : null;
-    }
-    return trimmed;
-  }
-
-  function handleSaveFolderUrl() {
-    if (typeof window !== 'undefined') {
-      localStorage.setItem('qmd_gdrive_folder_url', gdriveFolderUrl);
-    }
-  }
 
   function extractDocumentName(mdText) {
     if (!mdText) return '';
@@ -79,16 +61,12 @@
 
   onMount(async () => {
     // Load Google Identity Services script
-    if (typeof window !== 'undefined') {
-      gdriveFolderUrl = localStorage.getItem('qmd_gdrive_folder_url') || '';
-      
-      if (!window.google) {
-        const script = document.createElement('script');
-        script.src = 'https://accounts.google.com/gsi/client';
-        script.async = true;
-        script.defer = true;
-        document.head.appendChild(script);
-      }
+    if (typeof window !== 'undefined' && !window.google) {
+      const script = document.createElement('script');
+      script.src = 'https://accounts.google.com/gsi/client';
+      script.async = true;
+      script.defer = true;
+      document.head.appendChild(script);
     }
 
     renderMarkdown(markdownContent);
@@ -379,7 +357,7 @@
 
       const tokenClient = window.google.accounts.oauth2.initTokenClient({
         client_id: googleClientId,
-        scope: 'https://www.googleapis.com/auth/drive',
+        scope: 'https://www.googleapis.com/auth/drive.file',
         callback: async (tokenResponse) => {
           if (tokenResponse.error !== undefined) {
             isUploadingToDrive = false;
@@ -392,16 +370,11 @@
           loadingStatusText = 'Uploading PDF to Google Drive...';
 
           try {
-             // 3. Upload to Google Drive using multipart upload
-             const folderId = extractFolderId(gdriveFolderUrl);
-             const metadata = {
-               name: finalFilename,
-               mimeType: 'application/pdf',
-             };
-             
-             if (folderId) {
-               metadata.parents = [folderId];
-             }
+            // 3. Upload to Google Drive using multipart upload
+            const metadata = {
+              name: finalFilename,
+              mimeType: 'application/pdf',
+            };
 
             const formData = new FormData();
             formData.append(
@@ -732,13 +705,6 @@
           </svg>
           <span>{isUploadingToDrive ? 'Uploading...' : 'Upload to GDrive'}</span>
         </button>
-
-        <button type="button" on:click={() => showDriveSettings = !showDriveSettings} class="bg-white hover:bg-gray-100 text-gray-500 border border-[#dddddd] p-2.5 rounded-lg transition-all shadow-sm cursor-pointer select-none" aria-label="Google Drive Settings">
-          <svg class="w-4 h-4 text-gray-500" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M10.325 4.317c.426-1.756 2.924-1.756 3.35 0a1.724 1.724 0 002.573 1.066c1.543-.94 3.31.826 2.37 2.37a1.724 1.724 0 001.065 2.572c1.756.426 1.756 2.924 0 3.35a1.724 1.724 0 00-1.066 2.573c.94 1.543-.826 3.31-2.37 2.37a1.724 1.724 0 00-2.572 1.065c-.426 1.756-2.924 1.756-3.35 0a1.724 1.724 0 00-2.573-1.066c-1.543.94-3.31-.826-2.37-2.37a1.724 1.724 0 00-1.065-2.572c-1.756-.426-1.756-2.924 0-3.35a1.724 1.724 0 001.066-2.573c-.94-1.543.826-3.31 2.37-2.37.996.608 2.296.07 2.572-1.065z" />
-            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15 12a3 3 0 11-6 0 3 3 0 016 0z" />
-          </svg>
-        </button>
       {/if}
       
       <button on:click={handleDownloadAndSave} disabled={isProcessing || isSaving || isUploadingToDrive} class="bg-[#181d26] hover:bg-[#0d1218] active:bg-[#0d1218] text-white px-6 py-2.5 rounded-lg font-medium text-xs tracking-wide transition-all duration-150 flex items-center space-x-2 disabled:bg-gray-400 select-none shadow-sm cursor-pointer w-full sm:w-auto justify-center">
@@ -749,24 +715,6 @@
       </button>
     </div>
   </div>
-
-  {#if showDriveSettings}
-    <div class="bg-white border border-[#dddddd] rounded-xl p-5 shadow-sm flex flex-col gap-3">
-      <div class="flex justify-between items-center border-b border-[#dddddd] pb-2">
-        <h4 class="text-xs font-bold text-[#181d26] uppercase tracking-wider flex items-center">
-          <svg class="w-4 h-4 mr-1.5 text-[#1a73e8]" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M3 7v10a2 2 0 002 2h14a2 2 0 002-2V9a2 2 0 00-2-2h-6l-2-2H5a2 2 0 00-2 2z" />
-          </svg>
-          Google Drive Target Folder Configuration
-        </h4>
-        <button on:click={() => showDriveSettings = false} class="text-gray-400 hover:text-gray-600 text-xs font-semibold">✕ Close</button>
-      </div>
-      <p class="text-xs text-[#8a8d94] leading-relaxed">Paste your Google Drive Folder URL (e.g. <code>https://drive.google.com/drive/folders/...</code>) or a direct Folder ID below. If left blank, files will be uploaded to your root "My Drive" directory.</p>
-      <div class="flex flex-col sm:flex-row gap-3">
-        <input type="text" placeholder="https://drive.google.com/drive/folders/your_folder_id_here" bind:value={gdriveFolderUrl} on:input={handleSaveFolderUrl} class="flex-grow p-3 border border-[#dddddd] rounded-lg text-xs bg-white text-[#181d26] focus:outline-none focus:border-[#458fff] focus:ring-1 focus:ring-[#458fff] transition-all font-mono font-medium shadow-sm" />
-      </div>
-    </div>
-  {/if}
 
   <!-- Workspace split screen -->
   <div class="grid grid-cols-1 md:grid-cols-2 gap-6" style="height: calc(100vh - 180px);">
