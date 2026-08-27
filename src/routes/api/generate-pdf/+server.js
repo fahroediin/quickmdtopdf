@@ -150,7 +150,9 @@ export async function POST({ request }) {
     const currentDateString = `${dd}-${mmmm}-${yyyy}`;
 
     let rawFilename = request.headers.get('x-filename') || bodyFilename || extractHeadingTitle(markdown);
-    let downloadFileName = rawFilename.trim().replace(/\s+/g, '_');
+    let downloadFileName = rawFilename.trim()
+      .replace(/\s+/g, '_')
+      .replace(/[^\x00-\x7F]/g, ''); // Strip non-ASCII characters to prevent ByteString conversion errors in HTTP headers
     const dateRegex = /_\d{2}-[a-zA-Z\u00C0-\u017F]+-\d{4}$/;
     if (!dateRegex.test(downloadFileName)) {
       downloadFileName = `${downloadFileName}_${currentDateString}`;

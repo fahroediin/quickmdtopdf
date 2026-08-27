@@ -5,7 +5,7 @@
   import { supabase } from '$lib/supabaseClient';
   import { user } from '$lib/stores.js';
   import sampleMarkdown from '$lib/sample.md?raw';
-  import { env } from '$env/dynamic/public';
+  import { PUBLIC_GOOGLE_CLIENT_ID } from '$env/static/public';
 
   let markdownContent = sampleMarkdown;
   let renderedHtml = '';
@@ -18,7 +18,7 @@
   let isSaving = false;
   let isTitleManuallyEdited = false;
   
-  const googleClientId = env.PUBLIC_GOOGLE_CLIENT_ID;
+  const googleClientId = PUBLIC_GOOGLE_CLIENT_ID;
   let isUploadingToDrive = false;
   let gdriveLink = '';
   let showDriveInstructions = false;
@@ -191,8 +191,10 @@
       const yyyy = today.getFullYear();
       const currentDateString = `${dd}-${mmmm}-${yyyy}`;
       
-      // Normalize filename spacing to underscores
-      let downloadFileName = documentName.trim().replace(/\s+/g, '_');
+      // Normalize filename spacing to underscores and strip non-ASCII characters to keep HTTP/filesystems safe
+      let downloadFileName = documentName.trim()
+        .replace(/\s+/g, '_')
+        .replace(/[^\x00-\x7F]/g, '');
       
       // Append date if not already present
       const dateRegex = /_\d{2}-[a-zA-Z\u00C0-\u017F]+-\d{4}$/;
@@ -336,8 +338,10 @@
       const yyyy = today.getFullYear();
       const currentDateString = `${dd}-${mmmm}-${yyyy}`;
       
-      // Normalize filename spacing to underscores
-      let uploadFileName = documentName.trim().replace(/\s+/g, '_');
+      // Normalize filename spacing to underscores and strip non-ASCII characters to keep HTTP/filesystems safe
+      let uploadFileName = documentName.trim()
+        .replace(/\s+/g, '_')
+        .replace(/[^\x00-\x7F]/g, '');
       
       const dateRegex = /_\d{2}-[a-zA-Z\u00C0-\u017F]+-\d{4}$/;
       if (!dateRegex.test(uploadFileName)) {
