@@ -379,7 +379,7 @@
 
       const tokenClient = window.google.accounts.oauth2.initTokenClient({
         client_id: googleClientId,
-        scope: 'https://www.googleapis.com/auth/drive.file',
+        scope: 'https://www.googleapis.com/auth/drive',
         callback: async (tokenResponse) => {
           if (tokenResponse.error !== undefined) {
             isUploadingToDrive = false;
