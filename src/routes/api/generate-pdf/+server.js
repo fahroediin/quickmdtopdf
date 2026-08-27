@@ -50,6 +50,53 @@ export async function POST({ request }) {
   let browser = null;
 
   try {
+    // 1. Authenticate user via JWT or API Key
+    const authHeader = request.headers.get('Authorization');
+    const apiKeyHeader = request.headers.get('x-api-key');
+    let userId = null;
+
+    if (authHeader && authHeader.startsWith('Bearer ')) {
+      const token = authHeader.substring(7);
+      if (token.startsWith('qmd_live_')) {
+        // Authenticate via API key inside Bearer token
+        try {
+          const { data, error } = await supabase.rpc('get_user_id_by_api_key', { api_key: token });
+          if (data && !error) {
+            userId = data;
+          }
+        } catch (err) {
+          console.warn('Failed to verify API Key Bearer token:', err.message);
+        }
+      } else {
+        // Authenticate via Supabase JWT token
+        try {
+          const { data: { user: authedUser } } = await supabase.auth.getUser(token);
+          if (authedUser) {
+            userId = authedUser.id;
+          }
+        } catch (err) {
+          console.warn('Failed to verify Supabase JWT token:', err.message);
+        }
+      }
+    } else if (apiKeyHeader && apiKeyHeader.startsWith('qmd_live_')) {
+      // Authenticate via x-api-key header
+      try {
+        const { data, error } = await supabase.rpc('get_user_id_by_api_key', { api_key: apiKeyHeader });
+        if (data && !error) {
+          userId = data;
+        }
+      } catch (err) {
+        console.warn('Failed to verify API Key in x-api-key header:', err.message);
+      }
+    }
+
+    if (!userId) {
+      return new Response(JSON.stringify({ error: 'Unauthorized: Invalid session or API key. Access is restricted to registered accounts.' }), {
+        status: 401,
+        headers: { 'Content-Type': 'application/json' }
+      });
+    }
+
     const { markdown } = await request.json();
 
     if (!markdown || typeof markdown !== 'string') {
@@ -451,31 +498,15 @@ export async function POST({ request }) {
 
     // Log PDF usage asynchronously (non-blocking)
     (async () => {
-      let userId = null;
-      let isAnonymous = true;
-      const authHeader = request.headers.get('Authorization');
-      if (authHeader && authHeader.startsWith('Bearer ')) {
-        const token = authHeader.substring(7);
-        try {
-          const { data: { user: authedUser } } = await supabase.auth.getUser(token);
-          if (authedUser) {
-            userId = authedUser.id;
-            isAnonymous = false;
-          }
-        } catch (err) {
-          console.warn('Failed to verify token for pdf_usage_logs:', err.message);
-        }
-      }
-      
       try {
         const { error: logError } = await supabase.from('pdf_usage_logs').insert({
           user_id: userId,
-          is_anonymous: isAnonymous
+          is_anonymous: false
         });
         if (logError) {
           console.error('Failed to log PDF usage in pdf_usage_logs:', logError.message);
         } else {
-          console.log(`PDF usage logged successfully. Anonymous: ${isAnonymous}, User: ${userId}`);
+          console.log(`PDF usage logged successfully. User: ${userId}`);
         }
       } catch (err) {
         console.error('Error inserting pdf_usage_logs:', err.message);
