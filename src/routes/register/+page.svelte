@@ -1,5 +1,7 @@
 <script>
   import { supabase } from '$lib/supabaseClient';
+  import { logActivity } from '$lib/activityLogger.js';
+
   let email = '';
   let password = '';
   let loading = false;
@@ -28,6 +30,13 @@
       } else if (data?.user && (!data.user.identities || data.user.identities.length === 0)) {
         message = 'This email is already registered. Please login.';
       } else {
+        logActivity({
+          action: 'user_register',
+          details: { email },
+          userId: data?.user?.id,
+          userEmail: email
+        });
+
         if (data?.session) {
           window.location.href = '/dashboard';
         } else {

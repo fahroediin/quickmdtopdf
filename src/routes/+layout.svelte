@@ -3,8 +3,8 @@
   import '../app.css';
   import { onMount } from 'svelte';
   import { supabase } from '$lib/supabaseClient';
-  // HANYA IMPORT 'user' DARI FILE STORE YANG BENAR
   import { user } from '$lib/stores.js';
+  import { isAdmin } from '$lib/adminAuth.js';
 
   onMount(() => {
     // Logika ini sudah benar:
@@ -43,7 +43,13 @@
           <span class="text-xs text-[#8a8d94] font-medium select-none hidden sm:inline-block">Logged in as: <strong class="text-[#333840] font-semibold">{$user.email}</strong></span>
           <a href="/dashboard" class="text-[#333840] hover:text-[#181d26] font-medium transition-colors">My Documents</a>
           <a href="/dashboard/api-keys" class="text-[#333840] hover:text-[#181d26] font-medium transition-colors">API Keys</a>
-          <button on:click={handleLogout} class="bg-white border border-[#dddddd] text-[#333840] hover:bg-[#f8fafc] px-4 py-2 rounded-lg font-medium transition-colors duration-150 text-xs">
+          {#if isAdmin($user.email)}
+            <a href="/admin" class="inline-flex items-center space-x-1.5 bg-[#f8fafc] border border-[#dddddd] hover:border-[#181d26] text-[#181d26] px-3 py-1.5 rounded-lg text-xs font-semibold transition-all">
+              <span class="w-2 h-2 rounded-full bg-[#aa2d00]"></span>
+              <span>Admin</span>
+            </a>
+          {/if}
+          <button on:click={handleLogout} class="bg-white border border-[#dddddd] text-[#333840] hover:bg-[#f8fafc] px-4 py-2 rounded-lg font-medium transition-colors duration-150 text-xs cursor-pointer">
             Logout
           </button>
         </div>

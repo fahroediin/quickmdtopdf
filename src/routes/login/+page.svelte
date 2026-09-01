@@ -1,5 +1,7 @@
 <script>
   import { supabase } from '$lib/supabaseClient';
+  import { logActivity } from '$lib/activityLogger.js';
+
   let email = '';
   let password = '';
   let loading = false;
@@ -9,10 +11,16 @@
   async function handleLogin() {
     loading = true;
     message = '';
-    const { error } = await supabase.auth.signInWithPassword({ email, password });
+    const { data, error } = await supabase.auth.signInWithPassword({ email, password });
     if (error) {
       message = error.message;
     } else {
+      logActivity({
+        action: 'user_login',
+        details: { method: 'password' },
+        userId: data?.user?.id,
+        userEmail: email
+      });
       window.location.href = '/dashboard';
     }
     loading = false;

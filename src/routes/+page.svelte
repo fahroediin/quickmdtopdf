@@ -4,6 +4,7 @@
   import markdownit from 'markdown-it';
   import { supabase } from '$lib/supabaseClient';
   import { user } from '$lib/stores.js';
+  import { logActivity } from '$lib/activityLogger.js';
   import sampleMarkdown from '$lib/sample.md?raw';
 
 
@@ -210,6 +211,12 @@
             .eq('id', currentDocumentId)
             .eq('user_id', $user.id);
           if (error) throw error;
+          logActivity({
+            action: 'update_document',
+            details: { document_id: currentDocumentId, document_name: documentName },
+            userId: $user.id,
+            userEmail: $user.email
+          });
         } else {
           const { data, error } = await supabase
             .from('documents')
@@ -226,6 +233,12 @@
             const newUrl = new URL(window.location.href);
             newUrl.searchParams.set('id', data.id);
             window.history.replaceState({}, '', newUrl);
+            logActivity({
+              action: 'create_document',
+              details: { document_id: data.id, document_name: documentName },
+              userId: $user.id,
+              userEmail: $user.email
+            });
           }
         }
       }
@@ -255,6 +268,12 @@
           .eq('id', currentDocumentId)
           .eq('user_id', $user.id);
         if (error) throw error;
+        logActivity({
+          action: 'update_document',
+          details: { document_id: currentDocumentId, document_name: documentName },
+          userId: $user.id,
+          userEmail: $user.email
+        });
       } else {
         const { data, error } = await supabase
           .from('documents')
@@ -271,6 +290,12 @@
           const newUrl = new URL(window.location.href);
           newUrl.searchParams.set('id', data.id);
           window.history.replaceState({}, '', newUrl);
+          logActivity({
+            action: 'create_document',
+            details: { document_id: data.id, document_name: documentName },
+            userId: $user.id,
+            userEmail: $user.email
+          });
         }
       }
       alert('Document saved successfully!');

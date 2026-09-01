@@ -121,6 +121,83 @@ to authenticated
 using (true);
 ```
 
+### 4. Create Activity Logs Table & RLS
+Run this query to enable comprehensive logging of system actions (PDF generations, document operations, API keys, logins, registrations):
+```sql
+-- Create activity_logs table
+create table if not exists public.activity_logs (
+  id uuid default gen_random_uuid() primary key,
+  user_id uuid references auth.users(id) on delete set null,
+  user_email text,
+  action text not null,
+  details jsonb default '{}'::jsonb,
+  created_at timestamptz default now() not null
+);
+
+-- Indexes for fast query performance
+create index if not exists idx_activity_logs_created_at on public.activity_logs(created_at desc);
+create index if not exists idx_activity_logs_action on public.activity_logs(action);
+create index if not exists idx_activity_logs_user_id on public.activity_logs(user_id);
+
+-- Enable Row Level Security
+alter table public.activity_logs enable row level security;
+
+-- Policies
+create policy "Enable insert for activity_logs"
+on public.activity_logs for insert to public with check (true);
+
+create policy "Enable select for authenticated users"
+on public.activity_logs for select to authenticated using (true);
+```
+
+### 5. Create User Management Analytics Function (RPC)
+Run this SQL function in your Supabase SQL Editor to allow the Admin User Management panel to quickly aggregate document counts, export counts, and API key counts per registered user:
+```sql
+create or replace function public.get_admin_users_list()
+returns table (
+  id uuid,
+  email text,
+  created_at timestamptz,
+  last_sign_in_at timestamptz,
+  documents_count bigint,
+  pdf_exports_count bigint,
+  api_keys_count bigint
+)
+language plpgsql
+security definer
+as $$
+begin
+  return query
+  select
+    u.id,
+    u.email::text,
+    u.created_at,
+    u.last_sign_in_at,
+    coalesce(d.doc_count, 0)::bigint as documents_count,
+    coalesce(p.log_count, 0)::bigint as pdf_exports_count,
+    coalesce(a.key_count, 0)::bigint as api_keys_count
+  from auth.users u
+  left join (
+    select user_id, count(*) as doc_count
+    from public.documents
+    group by user_id
+  ) d on d.user_id = u.id
+  left join (
+    select user_id, count(*) as log_count
+    from public.activity_logs
+    where action = 'generate_pdf'
+    group by user_id
+  ) p on p.user_id = u.id
+  left join (
+    select user_id, count(*) as key_count
+    from public.api_keys
+    group by user_id
+  ) a on a.user_id = u.id
+  order by u.created_at desc;
+end;
+$$;
+```
+
 ---
 
 ## 🛠️ Troubleshooting

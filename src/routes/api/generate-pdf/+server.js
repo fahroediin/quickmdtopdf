@@ -548,20 +548,35 @@ export async function POST({ request }) {
     // Post-process: kompres PDF menggunakan pdf-lib
     const optimizedPdf = await compressPdf(pdfBuffer);
 
-    // Log PDF usage asynchronously (non-blocking)
+    // Log PDF usage & activity asynchronously (non-blocking)
     (async () => {
       try {
+        // 1. Maintain backward compatibility with pdf_usage_logs
         const { error: logError } = await supabase.from('pdf_usage_logs').insert({
           user_id: userId,
           is_anonymous: false
         });
         if (logError) {
-          console.error('Failed to log PDF usage in pdf_usage_logs:', logError.message);
-        } else {
-          console.log(`PDF usage logged successfully. User: ${userId}`);
+          console.warn('Note on pdf_usage_logs:', logError.message);
+        }
+
+        // 2. Insert rich log into activity_logs
+        const exportMethod = apiKeyHeader ? 'API Key' : (authHeader?.includes('qmd_live_') ? 'API Key' : 'Web Session');
+        const { error: actError } = await supabase.from('activity_logs').insert({
+          user_id: userId,
+          action: 'generate_pdf',
+          details: {
+            filename: `${downloadFileName}.pdf`,
+            document_title: rawFilename,
+            method: exportMethod,
+            size_kb: Math.round(optimizedPdf.length / 1024)
+          }
+        });
+        if (actError) {
+          console.warn('Note on activity_logs:', actError.message);
         }
       } catch (err) {
-        console.error('Error inserting pdf_usage_logs:', err.message);
+        console.warn('Error recording PDF usage activity:', err.message);
       }
     })();
 

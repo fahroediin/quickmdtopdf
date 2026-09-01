@@ -3,6 +3,7 @@
   import { onMount } from 'svelte';
   import { supabase } from '$lib/supabaseClient';
   import { user } from '$lib/stores.js';
+  import { logActivity } from '$lib/activityLogger.js';
 
   let apiKeys = [];
   let loading = true;
@@ -68,6 +69,13 @@
 
       if (error) throw error;
 
+      logActivity({
+        action: 'create_api_key',
+        details: { key_name: newKeyName, key_id: data?.id },
+        userId: $user.id,
+        userEmail: $user.email
+      });
+
       newKeyName = '';
       await fetchApiKeys();
       // Auto show the newly generated key
@@ -95,6 +103,12 @@
       console.error('Error deleting API key:', error);
       alert('Could not revoke the API key.');
     } else {
+      logActivity({
+        action: 'delete_api_key',
+        details: { key_id: id, key_name: name },
+        userId: $user.id,
+        userEmail: $user.email
+      });
       apiKeys = apiKeys.filter(k => k.id !== id);
     }
   }

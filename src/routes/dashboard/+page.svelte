@@ -3,6 +3,7 @@
   import { onMount } from 'svelte';
   import { supabase } from '$lib/supabaseClient';
   import { user } from '$lib/stores.js';
+  import { logActivity } from '$lib/activityLogger.js';
 
   let documents = [];
   let loading = true;
@@ -45,13 +46,19 @@
     loading = false;
   });
 
-  async function deleteDocument(id) {
+  async function deleteDocument(id, name = '') {
     if (!confirm('Are you sure you want to delete this document?')) return;
 
     const { error } = await supabase.from('documents').delete().eq('id', id);
     if (error) {
       alert('Could not delete the document.');
     } else {
+      logActivity({
+        action: 'delete_document',
+        details: { document_id: id, document_name: name },
+        userId: $user?.id,
+        userEmail: $user?.email
+      });
       documents = documents.filter(doc => doc.id !== id);
     }
   }
@@ -145,7 +152,7 @@
                 <a href="/?id={doc.id}" class="text-xs font-semibold text-[#181d26] hover:underline cursor-pointer select-none">
                   Open & Edit
                 </a>
-                <button on:click={() => deleteDocument(doc.id)} class="text-xs font-semibold text-[#aa2d00] hover:underline cursor-pointer select-none">
+                <button on:click={() => deleteDocument(doc.id, doc.document_name)} class="text-xs font-semibold text-[#aa2d00] hover:underline cursor-pointer select-none">
                   Delete
                 </button>
               </div>
