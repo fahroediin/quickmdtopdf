@@ -509,12 +509,35 @@ export async function POST({ request }) {
 </body>
 </html>`;
 
+    // Detect system-installed Chrome on Linux VPS
+    // This avoids relying on Puppeteer's bundled Chromium which often has
+    // missing dependencies or cache path issues on server environments
+    const executablePath = await (async () => {
+      const { existsSync } = await import('fs');
+      const candidates = [
+        '/usr/bin/google-chrome-stable',
+        '/usr/bin/google-chrome',
+        '/usr/bin/chromium-browser',
+        '/usr/bin/chromium'
+      ];
+      for (const candidate of candidates) {
+        if (existsSync(candidate)) {
+          console.log(`Using system Chrome: ${candidate}`);
+          return candidate;
+        }
+      }
+      console.log('No system Chrome found, using Puppeteer bundled browser');
+      return undefined; // fallback to Puppeteer's bundled browser
+    })();
+
     browser = await puppeteer.launch({
       headless: true,
+      executablePath,
       args: [
         '--no-sandbox',
         '--disable-setuid-sandbox',
         '--disable-gpu',
+        '--disable-dev-shm-usage',    // Prevent /dev/shm issues on VPS
         '--font-render-hinting=none'  // Reduce font complexity in PDF
       ]
     });
