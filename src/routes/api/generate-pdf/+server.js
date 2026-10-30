@@ -4,6 +4,7 @@ import puppeteer from 'puppeteer';
 import markdownit from 'markdown-it';
 import { PDFDocument } from 'pdf-lib';
 import { supabase } from '$lib/supabaseClient.js';
+import { supabaseAdmin } from '$lib/server/supabaseAdmin.js';
 
 // Inisialisasi markdown-it dengan opsi lengkap
 const md = markdownit({
@@ -573,9 +574,14 @@ export async function POST({ request }) {
 
     // Log PDF usage & activity asynchronously (non-blocking)
     (async () => {
+      // Logs are written on the user's behalf, which RLS only allows for service_role
+      if (!supabaseAdmin) {
+        console.warn('SUPABASE_SERVICE_ROLE_KEY is not set; skipping PDF usage logging.');
+        return;
+      }
       try {
         // 1. Maintain backward compatibility with pdf_usage_logs
-        const { error: logError } = await supabase.from('pdf_usage_logs').insert({
+        const { error: logError } = await supabaseAdmin.from('pdf_usage_logs').insert({
           user_id: userId,
           is_anonymous: false
         });
@@ -585,7 +591,7 @@ export async function POST({ request }) {
 
         // 2. Insert rich log into activity_logs
         const exportMethod = apiKeyHeader ? 'API Key' : (authHeader?.includes('qmd_live_') ? 'API Key' : 'Web Session');
-        const { error: actError } = await supabase.from('activity_logs').insert({
+        const { error: actError } = await supabaseAdmin.from('activity_logs').insert({
           user_id: userId,
           action: 'generate_pdf',
           details: {
