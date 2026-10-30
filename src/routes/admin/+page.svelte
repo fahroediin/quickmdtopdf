@@ -33,83 +33,9 @@
   };
   let usersSearchQuery = '';
 
-  // SQL Script for in-app migration reference
-  const setupSqlScript = `-- ====================================================
--- QUICKMDtoPDF DATABASE SETUP & MIGRATION SCRIPT
--- Run this in your Supabase project's SQL Editor
--- ====================================================
-
--- 1. Create activity_logs table for rich system event tracking
-CREATE TABLE IF NOT EXISTS public.activity_logs (
-  id uuid DEFAULT gen_random_uuid() PRIMARY KEY,
-  user_id uuid REFERENCES auth.users(id) ON DELETE SET NULL,
-  user_email text,
-  action text NOT NULL,
-  details jsonb DEFAULT '{}'::jsonb,
-  created_at timestamptz DEFAULT now() NOT NULL
-);
-
--- Index for high-performance log queries
-CREATE INDEX IF NOT EXISTS idx_activity_logs_created_at ON public.activity_logs(created_at DESC);
-CREATE INDEX IF NOT EXISTS idx_activity_logs_action ON public.activity_logs(action);
-CREATE INDEX IF NOT EXISTS idx_activity_logs_user_id ON public.activity_logs(user_id);
-
--- Enable Row Level Security
-ALTER TABLE public.activity_logs ENABLE ROW LEVEL SECURITY;
-
--- Policies: Allow inserts from public/authenticated users, allow reads for authenticated users
-CREATE POLICY "Enable insert for activity_logs"
-ON public.activity_logs FOR INSERT TO public WITH CHECK (true);
-
-CREATE POLICY "Enable select for authenticated users"
-ON public.activity_logs FOR SELECT TO authenticated USING (true);
-
-
--- 2. Create RPC Function for Admin User Management Analytics
-CREATE OR REPLACE FUNCTION public.get_admin_users_list()
-RETURNS TABLE (
-  id uuid,
-  email text,
-  created_at timestamptz,
-  last_sign_in_at timestamptz,
-  documents_count bigint,
-  pdf_exports_count bigint,
-  api_keys_count bigint
-)
-LANGUAGE plpgsql
-SECURITY DEFINER
-AS $$
-BEGIN
-  RETURN QUERY
-  SELECT
-    u.id,
-    u.email::text,
-    u.created_at,
-    u.last_sign_in_at,
-    COALESCE(d.doc_count, 0)::bigint AS documents_count,
-    COALESCE(p.log_count, 0)::bigint AS pdf_exports_count,
-    COALESCE(a.key_count, 0)::bigint AS api_keys_count
-  FROM auth.users u
-  LEFT JOIN (
-    SELECT user_id, COUNT(*) AS doc_count
-    FROM public.documents
-    GROUP BY user_id
-  ) d ON d.user_id = u.id
-  LEFT JOIN (
-    SELECT user_id, COUNT(*) AS log_count
-    FROM public.activity_logs
-    WHERE action = 'generate_pdf'
-    GROUP BY user_id
-  ) p ON p.user_id = u.id
-  LEFT JOIN (
-    SELECT user_id, COUNT(*) AS key_count
-    FROM public.api_keys
-    GROUP BY user_id
-  ) a ON a.user_id = u.id
-  ORDER BY u.created_at DESC;
-END;
-$$;
-`;
+  // Setup SQL lives in sql/ and is served by /api/admin/setup-sql to admins only,
+  // so the database schema is no longer shipped to every visitor's browser.
+  let setupSqlScript = '';
 
   async function fetchAdminData() {
     if (!$user || !isAdmin($user.email)) {
@@ -139,6 +65,14 @@ $$;
       const usersRes = await fetch('/api/admin/users', { headers });
       if (usersRes.ok) {
         usersData = await usersRes.json();
+      }
+
+      // 3. Fetch SQL Setup Script
+      if (!setupSqlScript) {
+        const sqlRes = await fetch('/api/admin/setup-sql', { headers });
+        if (sqlRes.ok) {
+          setupSqlScript = await sqlRes.text();
+        }
       }
     } catch (err) {
       console.error('Error fetching admin data:', err);
